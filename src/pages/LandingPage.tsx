@@ -483,7 +483,6 @@ export default function LandingPage() {
   }, []);
 
   const smoothScroll = (id: string) => document.getElementById(id)?.scrollIntoView({ behavior: "smooth" });
-  const goToDashboard = () => navigate("/dashboard");
 
   const navLinks = ["output", "features", "how"];
 
@@ -593,20 +592,20 @@ export default function LandingPage() {
             </Reveal>
             <Reveal delay={0.3}>
               <div className="ss-cta-row">
-                <button onClick={goToDashboard} style={{
+                <button onClick={() => navigate("/signup")} style={{
                   display: "inline-flex", alignItems: "center", gap: 8, padding: "15px 28px",
                   background: C.rust, color: "#fff", border: "none", borderRadius: 8, fontSize: 14,
                   fontWeight: 600, cursor: "pointer", transition: "all 0.25s", fontFamily: "inherit",
                   boxShadow: "0 6px 20px rgba(196,99,58,0.25)",
                 }}>
-                  Sign up now <ArrowRight size={16} />
+                  Sign up now
                 </button>
-                <button onClick={() => smoothScroll("output")} style={{
+                <button onClick={() => navigate("/faq")} style={{
                   display: "inline-flex", alignItems: "center", gap: 8, padding: "15px 28px",
                   background: "transparent", color: C.ink2, border: `1px solid ${C.border}`,
                   borderRadius: 8, fontSize: 14, fontWeight: 500, cursor: "pointer", fontFamily: "inherit",
                 }}>
-                  Learn more <ArrowUp size={16} />
+                  Learn more <ArrowRight size={16} />
                 </button>
               </div>
             </Reveal>
@@ -751,7 +750,7 @@ export default function LandingPage() {
           <Reveal><div style={{ fontSize: 11, fontWeight: 600, letterSpacing: 3, color: "rgba(255,255,255,0.8)", textTransform: "uppercase", marginBottom: 12 }}>Ready?</div></Reveal>
           <Reveal delay={0.1}><h2 style={{ fontSize: 32, fontWeight: 700, marginBottom: 28, letterSpacing: -0.5, color: "#fff" }}>Stop counting steel by hand</h2></Reveal>
           <Reveal delay={0.2}>
-            <button onClick={goToDashboard} style={{
+            <button onClick={() => navigate("/signup")} style={{
               padding: "16px 36px", background: "#fff", color: C.rust, border: "none", borderRadius: 8,
               fontSize: 16, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", boxShadow: "0 8px 24px rgba(0,0,0,0.15)",
             }}>
@@ -762,22 +761,26 @@ export default function LandingPage() {
       </section>
 
       {/* FOOTER */}
-      <Footer />
+      <Footer onScrollTo={smoothScroll} />
     </div>
   );
 }
 
 // === FOOTER (dark, GoodFi-style) ===
-function Footer() {
-  const linkCol = (title: string, links: string[]) => (
+function Footer({ onScrollTo }: { onScrollTo: (id: string) => void }) {
+  const navigate = useNavigate();
+
+  const linkCol = (title: string, links: { label: string; to?: string; scrollTo?: string }[]) => (
     <div>
       <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", color: "rgba(245,237,228,0.4)", marginBottom: 16 }}>{title}</div>
       <div style={{ display: "flex", flexDirection: "column", gap: 11 }}>
         {links.map((l) => (
-          <a key={l} style={{ fontSize: 13.5, color: "rgba(245,237,228,0.75)", textDecoration: "none", cursor: "pointer" }}
+          <a key={l.label}
+            onClick={() => { if (l.to) navigate(l.to); else if (l.scrollTo) onScrollTo(l.scrollTo); }}
+            style={{ fontSize: 13.5, color: "rgba(245,237,228,0.75)", textDecoration: "none", cursor: (l.to || l.scrollTo) ? "pointer" : "default" }}
             onMouseEnter={(e) => (e.currentTarget.style.color = "#e8854a")}
             onMouseLeave={(e) => (e.currentTarget.style.color = "rgba(245,237,228,0.75)")}>
-            {l}
+            {l.label}
           </a>
         ))}
       </div>
@@ -811,9 +814,21 @@ function Footer() {
             </div>
           </div>
 
-          {linkCol("Product", ["Sample Output", "Features", "How it works", "Dashboard"])}
-          {linkCol("Company", ["About", "Contact", "Support"])}
-          {linkCol("Legal", ["Privacy Policy", "Terms of Service"])}
+          {linkCol("Product", [
+            { label: "Sample Output", scrollTo: "output" },
+            { label: "Features", scrollTo: "features" },
+            { label: "How it works", scrollTo: "how" },
+            { label: "FAQ", to: "/faq" },
+          ])}
+          {linkCol("Company", [
+            { label: "About" },
+            { label: "Contact" },
+            { label: "Support" },
+          ])}
+          {linkCol("Legal", [
+            { label: "Privacy Policy" },
+            { label: "Terms of Service" },
+          ])}
         </div>
 
         <div style={{ borderTop: "1px solid rgba(245,237,228,0.1)", marginTop: 56, padding: "24px 0", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
