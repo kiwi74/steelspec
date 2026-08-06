@@ -755,7 +755,7 @@ export default function LandingPage() {
               padding: "16px 36px", background: "#fff", color: C.rust, border: "none", borderRadius: 8,
               fontSize: 16, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", boxShadow: "0 8px 24px rgba(0,0,0,0.15)",
             }}>
-              Go to Dashboard <span style={{ marginLeft: 6 }}>→</span>
+              Sign up now <span style={{ marginLeft: 6 }}>→</span>
             </button>
           </Reveal>
         </div>
