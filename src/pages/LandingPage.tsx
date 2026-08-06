@@ -331,11 +331,141 @@ function FacebookIcon({ size = 15 }: { size?: number }) {
   );
 }
 
+// === FLOATING LABEL INPUT ===
+function FloatingInput({
+  label, type = "text", value, onChange, name,
+}: { label: string; type?: string; value: string; onChange: (v: string) => void; name: string }) {
+  const [focused, setFocused] = useState(false);
+  const active = focused || value.length > 0;
+  return (
+    <div style={{ position: "relative", marginTop: 10 }}>
+      <input
+        id={`ss-auth-${name}`}
+        type={type}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
+        style={{
+          width: "100%", padding: "13px 14px", background: "transparent",
+          border: `1.5px solid ${active ? "#c4633a" : "rgba(245,237,228,0.22)"}`,
+          borderRadius: 8, color: "#f5ede4", fontSize: 14, fontFamily: "inherit",
+          outline: "none", transition: "border-color 0.2s", boxSizing: "border-box",
+        }}
+      />
+      <label
+        htmlFor={`ss-auth-${name}`}
+        style={{
+          position: "absolute", left: 11, pointerEvents: "none",
+          top: active ? -8 : "50%", transform: active ? "none" : "translateY(-50%)",
+          fontSize: active ? 11 : 14, padding: active ? "0 5px" : 0,
+          background: active ? "#1a1a1a" : "transparent",
+          color: active ? "#c4633a" : "rgba(245,237,228,0.5)",
+          transition: "all 0.15s ease-out", fontWeight: active ? 600 : 400,
+          letterSpacing: active ? 0.3 : 0,
+        }}
+      >
+        {label}
+      </label>
+    </div>
+  );
+}
+
+// === AUTH POPOVER (sign in / sign up) ===
+function AuthPopover({ onClose, align = "right" }: { onClose: () => void; align?: "left" | "right" | "center" }) {
+  const [mode, setMode] = useState<"signup" | "signin">("signup");
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const navigate = useNavigate();
+  const popRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (popRef.current && !popRef.current.contains(e.target as Node)) onClose();
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [onClose]);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    navigate("/dashboard");
+  };
+
+  const positionStyle: React.CSSProperties = align === "center"
+    ? { left: "50%", transform: "translateX(-50%)" }
+    : align === "left" ? { left: 0 } : { right: 0 };
+
+  return (
+    <div ref={popRef} style={{
+      position: "absolute", top: "calc(100% + 12px)",
+      ...positionStyle,
+      width: 340, maxWidth: "calc(100vw - 32px)",
+      background: "#1a1a1a", borderRadius: 14, padding: 28,
+      boxShadow: "0 20px 60px rgba(0,0,0,0.35), 0 0 0 1px rgba(245,237,228,0.06)",
+      zIndex: 200, color: "#f5ede4",
+    }}>
+      <button onClick={onClose} aria-label="Close" style={{
+        position: "absolute", top: 16, right: 16, background: "none", border: "none",
+        color: "rgba(245,237,228,0.5)", cursor: "pointer", padding: 4,
+      }}>
+        <X size={16} />
+      </button>
+
+      <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 22 }}>
+        <div style={{ width: 26, height: 26, background: "#c4633a", borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 14, color: "#f5ede4" }}>S</div>
+        <span style={{ fontWeight: 700, fontSize: 13, letterSpacing: 2.5, color: "#c4633a" }}>STEELSPEC</span>
+      </div>
+
+      <h3 style={{ fontSize: 19, fontWeight: 700, marginBottom: 6, color: "#fff" }}>
+        {mode === "signup" ? "Create your account" : "Welcome back"}
+      </h3>
+      <p style={{ fontSize: 12.5, color: "rgba(245,237,228,0.55)", marginBottom: 20, lineHeight: 1.5 }}>
+        {mode === "signup"
+          ? "Start turning steel models into schedules in minutes."
+          : "Sign in to pick up where you left off."}
+      </p>
+
+      <form onSubmit={handleSubmit}>
+        {mode === "signup" && (
+          <FloatingInput label="Full name" name="name" value={name} onChange={setName} />
+        )}
+        <FloatingInput label="Email address" type="email" name="email" value={email} onChange={setEmail} />
+        <FloatingInput label="Password" type="password" name="password" value={password} onChange={setPassword} />
+
+        <button type="submit" style={{
+          width: "100%", marginTop: 20, padding: "13px 18px", background: "#c4633a", color: "#fff",
+          border: "none", borderRadius: 8, fontSize: 14, fontWeight: 700, cursor: "pointer",
+          fontFamily: "inherit", transition: "background 0.2s",
+        }}
+          onMouseEnter={(e) => (e.currentTarget.style.background = "#d4722a")}
+          onMouseLeave={(e) => (e.currentTarget.style.background = "#c4633a")}>
+          {mode === "signup" ? "Create account" : "Sign in"}
+        </button>
+      </form>
+
+      <div style={{ textAlign: "center", marginTop: 18, fontSize: 12.5, color: "rgba(245,237,228,0.5)" }}>
+        {mode === "signup" ? (
+          <>Already have an account?{" "}
+            <a onClick={() => setMode("signin")} style={{ color: "#c4633a", fontWeight: 600, cursor: "pointer" }}>Sign in</a>
+          </>
+        ) : (
+          <>New to SteelSpec?{" "}
+            <a onClick={() => setMode("signup")} style={{ color: "#c4633a", fontWeight: 600, cursor: "pointer" }}>Create an account</a>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // === MAIN PAGE ===
 export default function LandingPage() {
   const navigate = useNavigate();
   const [navSolid, setNavSolid] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [authOpen, setAuthOpen] = useState(false);
 
   useEffect(() => {
     const handler = () => setNavSolid(window.scrollY > 20);
@@ -365,18 +495,19 @@ export default function LandingPage() {
           <span style={{ fontWeight: 700, fontSize: 14, letterSpacing: 3, color: C.ink }}>STEELSPEC</span>
         </div>
 
-        <div className="ss-nav-links ss-nav-desktop" style={{ display: "flex", gap: 28, alignItems: "center" }}>
+        <div className="ss-nav-links ss-nav-desktop" style={{ display: "flex", gap: 28, alignItems: "center", position: "relative" }}>
           {navLinks.map((id) => (
             <a key={id} onClick={() => smoothScroll(id)} style={{ color: C.ink2, fontSize: 13, textDecoration: "none", cursor: "pointer", letterSpacing: 0.3 }}>
               {id === "output" ? "Sample Output" : id === "how" ? "How it works" : id.charAt(0).toUpperCase() + id.slice(1)}
             </a>
           ))}
-          <button onClick={goToDashboard} style={{
+          <button onClick={() => setAuthOpen((v) => !v)} style={{
             padding: "9px 18px", background: C.rust, color: "#fff", border: "none", borderRadius: 7,
             fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "inherit",
           }}>
-            Go to Dashboard
+            Dashboard
           </button>
+          {authOpen && <AuthPopover onClose={() => setAuthOpen(false)} align="right" />}
         </div>
 
         <button
@@ -402,12 +533,15 @@ export default function LandingPage() {
               {id === "output" ? "Sample Output" : id === "how" ? "How it works" : id.charAt(0).toUpperCase() + id.slice(1)}
             </a>
           ))}
-          <button onClick={() => { setMobileMenuOpen(false); goToDashboard(); }} style={{
-            marginTop: 14, padding: "12px 18px", background: C.rust, color: "#fff", border: "none", borderRadius: 7,
-            fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit",
-          }}>
-            Go to Dashboard
-          </button>
+          <div style={{ position: "relative", marginTop: 14 }}>
+            <button onClick={() => setAuthOpen((v) => !v)} style={{
+              width: "100%", padding: "12px 18px", background: C.rust, color: "#fff", border: "none", borderRadius: 7,
+              fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit",
+            }}>
+              Dashboard
+            </button>
+            {authOpen && <AuthPopover onClose={() => setAuthOpen(false)} align="center" />}
+          </div>
         </div>
       )}
 
