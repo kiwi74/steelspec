@@ -73,7 +73,7 @@ export default function AuthPage() {
         position: "absolute", top: 28, left: 28, display: "flex", alignItems: "center", gap: 7,
         color: "rgba(245,237,228,0.6)", fontSize: 13, textDecoration: "none", zIndex: 2,
       }}>
-        <ArrowLeft size={15} /> Back to site
+        <ArrowLeft size={15} /> Home
       </Link>
 
       <div style={{
