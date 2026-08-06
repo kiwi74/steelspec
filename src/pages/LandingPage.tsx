@@ -2,8 +2,8 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import type { ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  Upload, ArrowRight, Layers, FileText, Shield, RefreshCw,
-  BarChart3, Zap, ChevronDown, Check, Menu, X,
+  ArrowRight, Layers, FileText, Shield, RefreshCw,
+  BarChart3, Zap, ChevronDown, Check, Menu, X, Mail,
 } from "lucide-react";
 import { theme as C } from "../lib/theme";
 
@@ -60,7 +60,7 @@ function ScrollProgress() {
   }, []);
   return (
     <div style={{ position: "fixed", top: 0, left: 0, right: 0, height: 2, zIndex: 200 }}>
-      <div style={{ height: "100%", width: `${progress}%`, background: `linear-gradient(90deg, ${C.rustDark}, ${C.rustLight}, ${C.rustGlow})`, transition: "width 0.1s linear" }} />
+      <div style={{ height: "100%", width: `${progress}%`, background: `linear-gradient(90deg, ${C.rustDark}, ${C.rustLight}, ${C.rust})`, transition: "width 0.1s linear" }} />
     </div>
   );
 }
@@ -68,8 +68,8 @@ function ScrollProgress() {
 function Reveal({ children, delay = 0, direction = "up" }: { children: ReactNode; delay?: number; direction?: "up" | "down" | "left" | "right" | "scale" }) {
   const [ref, inView] = useInView();
   const transforms: Record<string, string> = {
-    up: "translateY(40px)", down: "translateY(-40px)",
-    left: "translateX(40px)", right: "translateX(-40px)", scale: "scale(0.95)",
+    up: "translateY(32px)", down: "translateY(-32px)",
+    left: "translateX(32px)", right: "translateX(-32px)", scale: "scale(0.96)",
   };
   return (
     <div ref={ref} style={{
@@ -82,7 +82,7 @@ function Reveal({ children, delay = 0, direction = "up" }: { children: ReactNode
   );
 }
 
-// === STEEL FRAME (3D hero visual) ===
+// === STEEL FRAME (3D hero visual, restyled for white background) ===
 function SteelFrame() {
   const [mouseX, setMouseX] = useState(0);
   const [mouseY, setMouseY] = useState(0);
@@ -97,12 +97,14 @@ function SteelFrame() {
 
   const beamStyle = (extra: React.CSSProperties): React.CSSProperties => ({
     position: "absolute",
-    background: "linear-gradient(135deg, rgba(196,99,58,0.15), rgba(196,99,58,0.06))",
-    border: "1px solid rgba(196,99,58,0.3)", ...extra,
+    background: "linear-gradient(135deg, rgba(196,99,58,0.85), rgba(196,99,58,0.65))",
+    border: "1px solid rgba(158,78,44,0.9)",
+    boxShadow: "0 4px 14px rgba(196,99,58,0.18)",
+    ...extra,
   });
   const glowStyle = (top: any, left: any, delay: number): React.CSSProperties => ({
-    position: "absolute", top, left, width: 5, height: 5, borderRadius: "50%",
-    background: C.rustGlow, boxShadow: `0 0 14px ${C.rustGlow}`,
+    position: "absolute", top, left, width: 6, height: 6, borderRadius: "50%",
+    background: C.rust, boxShadow: `0 0 12px ${C.rustLight}`,
     animation: `pulse 3s ease-in-out ${delay}s infinite`,
   });
 
@@ -110,9 +112,8 @@ function SteelFrame() {
     <div ref={containerRef} onMouseMove={handleMouseMove}
       style={{ width: "100%", height: 420, display: "flex", justifyContent: "center", alignItems: "center", perspective: 900, maxWidth: "100%", overflow: "hidden" }}>
       <style>{`
-        @keyframes pulse { 0%,100% { opacity:0.3; } 50% { opacity:0.8; } }
+        @keyframes pulse { 0%,100% { opacity:0.4; } 50% { opacity:1; } }
         @keyframes floatSpec { 0%,100% { transform:translateY(0); } 50% { transform:translateY(-10px); } }
-        @keyframes gridPulse { 0%,100% { opacity:0.03; } 50% { opacity:0.07; } }
         @keyframes spin { to { transform: rotate(360deg); } }
         .ss-frame-scale { transform: scale(1); }
         @media (max-width: 480px) { .ss-frame-scale { transform: scale(0.72); } }
@@ -121,17 +122,17 @@ function SteelFrame() {
         position: "relative", width: 300, height: 320, transformStyle: "preserve-3d",
         transform: `rotateY(${mouseX}deg) rotateX(${mouseY}deg)`, transition: "transform 0.15s ease-out",
       }}>
-        <div style={beamStyle({ left: 30, bottom: 0, width: 18, height: 260, background: "linear-gradient(180deg, rgba(196,99,58,0.2), rgba(196,99,58,0.08))" })} />
+        <div style={beamStyle({ left: 30, bottom: 0, width: 18, height: 260 })} />
         <div style={beamStyle({ right: 30, bottom: 0, width: 18, height: 260 })} />
-        <div style={beamStyle({ left: 30, top: 50, width: 240, height: 14, background: "linear-gradient(90deg, rgba(196,99,58,0.2), rgba(196,99,58,0.1))" })} />
-        <div style={beamStyle({ left: 30, top: 160, width: 240, height: 10, borderStyle: "dashed", opacity: 0.5 })} />
-        <div style={beamStyle({ left: 18, top: 46, width: 42, height: 5, background: "rgba(196,99,58,0.25)" })} />
-        <div style={beamStyle({ right: 18, top: 46, width: 42, height: 5, background: "rgba(196,99,58,0.25)" })} />
-        <div style={beamStyle({ left: 12, bottom: -4, width: 54, height: 6, background: "rgba(196,99,58,0.2)", borderRadius: 1 })} />
-        <div style={beamStyle({ right: 12, bottom: -4, width: 54, height: 6, background: "rgba(196,99,58,0.2)", borderRadius: 1 })} />
+        <div style={beamStyle({ left: 30, top: 50, width: 240, height: 14 })} />
+        <div style={beamStyle({ left: 30, top: 160, width: 240, height: 8, opacity: 0.5, borderStyle: "dashed" })} />
+        <div style={beamStyle({ left: 18, top: 46, width: 42, height: 6 })} />
+        <div style={beamStyle({ right: 18, top: 46, width: 42, height: 6 })} />
+        <div style={beamStyle({ left: 12, bottom: -4, width: 54, height: 7, borderRadius: 1 })} />
+        <div style={beamStyle({ right: 12, bottom: -4, width: 54, height: 7, borderRadius: 1 })} />
         <svg style={{ position: "absolute", inset: 0 }} viewBox="0 0 300 320" fill="none">
-          <line x1="48" y1="64" x2="252" y2="260" stroke="rgba(196,99,58,0.15)" strokeWidth="1.5" strokeDasharray="4 3" />
-          <line x1="252" y1="64" x2="48" y2="260" stroke="rgba(196,99,58,0.15)" strokeWidth="1.5" strokeDasharray="4 3" />
+          <line x1="48" y1="64" x2="252" y2="260" stroke="rgba(196,99,58,0.35)" strokeWidth="1.5" strokeDasharray="4 3" />
+          <line x1="252" y1="64" x2="48" y2="260" stroke="rgba(196,99,58,0.35)" strokeWidth="1.5" strokeDasharray="4 3" />
         </svg>
         <div style={glowStyle(47, 30, 0)} />
         <div style={glowStyle(47, 252, 0.8)} />
@@ -144,9 +145,9 @@ function SteelFrame() {
           { text: "M20 Gr8.8", bottom: 80, right: -85, delay: "2s" },
         ].map((s, i) => (
           <div key={i} style={{
-            position: "absolute", fontSize: 11, fontFamily: C.mono, color: C.rust, opacity: 0.5,
+            position: "absolute", fontSize: 11, fontFamily: C.mono, color: C.rustDark, opacity: 0.7,
             whiteSpace: "nowrap", letterSpacing: 1, animation: `floatSpec 4s ease-in-out ${s.delay} infinite`,
-            top: s.top, right: s.right, bottom: s.bottom, left: s.left,
+            top: s.top, right: s.right, bottom: s.bottom, left: s.left, fontWeight: 600,
           }}>{s.text}</div>
         ))}
       </div>
@@ -160,21 +161,20 @@ function FeatureCard({ icon: Icon, title, desc, delay }: { icon: any; title: str
     <Reveal delay={delay}>
       <div onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
         style={{
-          padding: "32px 28px", borderRadius: 10,
-          border: `1px solid ${hover ? "rgba(196,99,58,0.3)" : "rgba(122,122,122,0.12)"}`,
-          background: hover ? C.dark2 : C.dark, transition: "all 0.3s cubic-bezier(0.16,1,0.3,1)",
+          padding: "32px 28px", borderRadius: 12,
+          border: `1px solid ${hover ? C.rustBorder : C.border}`,
+          background: hover ? C.rustBg : C.card, transition: "all 0.3s cubic-bezier(0.16,1,0.3,1)",
           transform: hover ? "translateY(-4px)" : "none",
-          boxShadow: hover ? "0 12px 40px rgba(196,99,58,0.08)" : "none", cursor: "default",
+          boxShadow: hover ? "0 12px 32px rgba(196,99,58,0.1)" : "0 1px 2px rgba(0,0,0,0.02)", cursor: "default",
         }}>
         <div style={{
           width: 44, height: 44, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center",
-          background: `rgba(196,99,58,${hover ? 0.15 : 0.08})`,
-          border: `1px solid rgba(196,99,58,${hover ? 0.35 : 0.15})`, marginBottom: 18, transition: "all 0.3s",
+          background: C.rustBg, border: `1px solid ${C.rustBorder}`, marginBottom: 18, transition: "all 0.3s",
         }}>
           <Icon size={20} color={C.rust} strokeWidth={1.5} />
         </div>
-        <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 8, color: C.cream }}>{title}</h3>
-        <p style={{ fontSize: 13, color: C.warmGrey, lineHeight: 1.65, margin: 0 }}>{desc}</p>
+        <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 8, color: C.ink }}>{title}</h3>
+        <p style={{ fontSize: 13, color: C.grey, lineHeight: 1.65, margin: 0 }}>{desc}</p>
       </div>
     </Reveal>
   );
@@ -186,13 +186,148 @@ function Step({ num, title, desc, delay }: { num: string; title: string; desc: s
       <div style={{ textAlign: "center", flex: 1, position: "relative", padding: "0 12px" }}>
         <div style={{
           width: 52, height: 52, borderRadius: "50%", margin: "0 auto 16px", display: "flex",
-          alignItems: "center", justifyContent: "center", fontSize: 18, fontWeight: 700, color: C.rust,
-          background: C.charcoal, border: `2px solid ${C.rustDark}`, boxShadow: "0 0 20px rgba(196,99,58,0.15)",
+          alignItems: "center", justifyContent: "center", fontSize: 18, fontWeight: 700, color: "#fff",
+          background: C.rust, boxShadow: "0 4px 16px rgba(196,99,58,0.28)",
         }}>{num}</div>
-        <h4 style={{ fontSize: 15, fontWeight: 600, marginBottom: 6, color: C.cream }}>{title}</h4>
-        <p style={{ fontSize: 12, color: C.steelLight, lineHeight: 1.55, margin: 0 }}>{desc}</p>
+        <h4 style={{ fontSize: 15, fontWeight: 600, marginBottom: 6, color: C.ink }}>{title}</h4>
+        <p style={{ fontSize: 12, color: C.grey, lineHeight: 1.55, margin: 0 }}>{desc}</p>
       </div>
     </Reveal>
+  );
+}
+
+// === OUTPUT SAMPLE MOCKUPS ===
+
+function ScheduleMock() {
+  const rows = [
+    { mark: "B1", section: "310UB40.4", len: "5017", qty: "1", kg: "222.0" },
+    { mark: "B2", section: "200UB25.4", len: "12635", qty: "1", kg: "326.7" },
+    { mark: "C1", section: "150UC30.0", len: "2700", qty: "2", kg: "162.0" },
+    { mark: "BR1", section: "75x75x6EA", len: "3200", qty: "4", kg: "87.2" },
+  ];
+  return (
+    <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, overflow: "hidden", boxShadow: "0 8px 30px rgba(0,0,0,0.06)" }}>
+      <div style={{ background: C.rust, padding: "10px 16px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <span style={{ color: "#fff", fontSize: 12, fontWeight: 700, letterSpacing: 0.5 }}>STEEL MEMBER SCHEDULE</span>
+        <span style={{ color: "rgba(255,255,255,0.75)", fontSize: 10.5, fontFamily: C.mono }}>Henderson Residence</span>
+      </div>
+      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11.5 }}>
+        <thead>
+          <tr style={{ background: C.bg }}>
+            {["Mark", "Section", "Length", "Qty", "kg"].map((h) => (
+              <th key={h} style={{ textAlign: "left", padding: "8px 12px", fontSize: 9.5, fontWeight: 700, color: C.greyLight, textTransform: "uppercase", letterSpacing: 0.6 }}>{h}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r, i) => (
+            <tr key={i} style={{ borderTop: `1px solid ${C.borderLight}` }}>
+              <td style={{ padding: "8px 12px", fontFamily: C.mono, fontWeight: 600 }}>{r.mark}</td>
+              <td style={{ padding: "8px 12px", fontFamily: C.mono, color: C.ink2 }}>{r.section}</td>
+              <td style={{ padding: "8px 12px", fontFamily: C.mono, color: C.grey }}>{r.len}</td>
+              <td style={{ padding: "8px 12px", fontFamily: C.mono, color: C.grey }}>{r.qty}</td>
+              <td style={{ padding: "8px 12px", fontFamily: C.mono, color: C.grey }}>{r.kg}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <div style={{ padding: "10px 16px", background: C.bg, borderTop: `1px solid ${C.border}`, display: "flex", justifyContent: "space-between", fontSize: 11 }}>
+        <span style={{ color: C.grey }}>37 members · 13 sections</span>
+        <span style={{ fontWeight: 700, color: C.rust }}>3.09 tonnes total</span>
+      </div>
+    </div>
+  );
+}
+
+function ConnectionMock() {
+  return (
+    <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, overflow: "hidden", boxShadow: "0 8px 30px rgba(0,0,0,0.06)" }}>
+      <div style={{ background: C.rust, padding: "10px 16px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <span style={{ color: "#fff", fontSize: 12, fontWeight: 700, letterSpacing: 0.5 }}>CONNECTION CN004</span>
+        <span style={{ color: "rgba(255,255,255,0.75)", fontSize: 10.5, fontFamily: C.mono }}>Grid C1</span>
+      </div>
+      <div style={{ padding: 16 }}>
+        <div style={{ fontSize: 12.5, color: C.ink2, marginBottom: 12, fontWeight: 500 }}>
+          Upper beam B4 to Column C2 — bolted end plate
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+          {[
+            ["Bolts", "6× M20 Gr8.8"],
+            ["Plate", "16mm × 200 × 340"],
+            ["Gauge / Pitch", "90 / 70mm"],
+            ["Detail ref", "D2"],
+          ].map(([l, v]) => (
+            <div key={l} style={{ padding: "8px 10px", background: C.bg, borderRadius: 7, border: `1px solid ${C.borderLight}` }}>
+              <div style={{ fontSize: 9, textTransform: "uppercase", letterSpacing: 0.5, color: C.greyLight }}>{l}</div>
+              <div style={{ fontSize: 12, fontWeight: 600, fontFamily: C.mono, marginTop: 1 }}>{v}</div>
+            </div>
+          ))}
+        </div>
+        {/* mini schematic */}
+        <div style={{ marginTop: 14, height: 74, position: "relative", background: C.bg, borderRadius: 8, border: `1px solid ${C.borderLight}` }}>
+          <div style={{ position: "absolute", left: "38%", top: 8, bottom: 8, width: 12, background: "rgba(196,99,58,0.25)", border: "1px solid rgba(196,99,58,0.5)" }} />
+          <div style={{ position: "absolute", left: "44%", top: "42%", width: "42%", height: 10, background: "rgba(196,99,58,0.25)", border: "1px solid rgba(196,99,58,0.5)" }} />
+          {[0, 1].map((r) => (
+            <div key={r} style={{ position: "absolute", left: "50%", top: `${34 + r * 20}%`, width: 5, height: 5, borderRadius: "50%", background: C.rust }} />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FabDrawingMock() {
+  return (
+    <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, overflow: "hidden", boxShadow: "0 8px 30px rgba(0,0,0,0.06)" }}>
+      <div style={{ background: C.rust, padding: "10px 16px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <span style={{ color: "#fff", fontSize: 12, fontWeight: 700, letterSpacing: 0.5 }}>FAB DRAWING — MARK 005</span>
+        <span style={{ color: "rgba(255,255,255,0.75)", fontSize: 10.5, fontFamily: C.mono }}>310UB40.4</span>
+      </div>
+      <div style={{ padding: 16 }}>
+        <div style={{ height: 110, position: "relative", background: C.bg, borderRadius: 8, border: `1px solid ${C.borderLight}`, marginBottom: 12 }}>
+          {/* beam */}
+          <div style={{ position: "absolute", left: "12%", right: "30%", top: "44%", height: 14, background: "rgba(196,99,58,0.22)", border: "1px solid rgba(196,99,58,0.5)" }} />
+          <div style={{ position: "absolute", left: "12%", right: "30%", top: "36%", height: 4, background: "rgba(196,99,58,0.35)" }} />
+          <div style={{ position: "absolute", left: "12%", right: "30%", top: "58%", height: 4, background: "rgba(196,99,58,0.35)" }} />
+          {/* end plate */}
+          <div style={{ position: "absolute", right: "26%", top: "26%", bottom: "26%", width: 8, background: C.rustDark }} />
+          {/* bolts */}
+          {[0, 1, 2, 3].map((i) => (
+            <div key={i} style={{ position: "absolute", right: "23%", top: `${30 + (i % 2) * 34}%`, left: i > 1 ? "auto" : undefined, width: 5, height: 5, borderRadius: "50%", border: `1px solid ${C.rustDark}`, background: "#fff" }} />
+          ))}
+          <div style={{ position: "absolute", left: "12%", right: "30%", bottom: 6, textAlign: "center", fontSize: 9, fontFamily: C.mono, color: C.grey }}>5017 LG</div>
+        </div>
+        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11 }}>
+          <span style={{ color: C.grey }}>PL008 end plate · 4× M22</span>
+          <span style={{ fontWeight: 700, color: C.rust }}>222.0 kg</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Custom social icons (lucide-react no longer ships brand/logo icons)
+function LinkedInIcon({ size = 15 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor">
+      <path d="M20.45 20.45h-3.55v-5.57c0-1.33-.02-3.03-1.85-3.03-1.85 0-2.14 1.45-2.14 2.94v5.66H9.36V9h3.41v1.56h.05c.47-.9 1.63-1.85 3.36-1.85 3.6 0 4.27 2.37 4.27 5.45v6.29zM5.34 7.43a2.06 2.06 0 1 1 0-4.12 2.06 2.06 0 0 1 0 4.12zM7.12 20.45H3.56V9h3.56v11.45z"/>
+    </svg>
+  );
+}
+function InstagramIcon({ size = 15 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <rect x="3" y="3" width="18" height="18" rx="5" />
+      <circle cx="12" cy="12" r="4" />
+      <circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+function FacebookIcon({ size = 15 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor">
+      <path d="M14 13.5h2.5l1-4H14V7.5c0-1.03 0-2 2-2h1.5V2.14c-.35-.05-1.5-.14-2.72-.14C11.3 2 9.5 3.66 9.5 6.7V9.5H6.5v4h3V22h4.5v-8.5z"/>
+    </svg>
   );
 }
 
@@ -201,129 +336,78 @@ export default function LandingPage() {
   const navigate = useNavigate();
   const [navSolid, setNavSolid] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [uploadHover, setUploadHover] = useState(false);
-  const [showProcess, setShowProcess] = useState(false);
-  const [progress, setProgress] = useState(0);
-  const [stage, setStage] = useState("Parsing model file...");
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [fileError, setFileError] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const ACCEPTED_EXTENSIONS = [".ifc", ".dwg", ".dxf"];
-
-  const validateAndSetFile = (file: File | undefined) => {
-    if (!file) return;
-    const name = file.name.toLowerCase();
-    const isValid = ACCEPTED_EXTENSIONS.some((ext) => name.endsWith(ext));
-    if (!isValid) {
-      setFileError(`"${file.name}" isn't a supported file type. Please upload an .IFC, .DWG, or .DXF file.`);
-      setSelectedFile(null);
-      return;
-    }
-    setFileError(null);
-    setSelectedFile(file);
-    setShowProcess(true);
-  };
-
-  const handleBrowseClick = () => fileInputRef.current?.click();
-  const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    validateAndSetFile(e.target.files?.[0]);
-    e.target.value = ""; // allow re-selecting the same file later
-  };
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    setUploadHover(false);
-    validateAndSetFile(e.dataTransfer.files?.[0]);
-  };
 
   useEffect(() => {
-    const handler = () => setNavSolid(window.scrollY > 60);
+    const handler = () => setNavSolid(window.scrollY > 20);
     window.addEventListener("scroll", handler, { passive: true });
     return () => window.removeEventListener("scroll", handler);
   }, []);
 
-  useEffect(() => {
-    if (!showProcess) return;
-    const stages = [
-      { at: 15, t: "Reading structural elements..." }, { at: 35, t: "Matching steel sections..." },
-      { at: 55, t: "Identifying connections..." }, { at: 75, t: "Calculating weights..." },
-      { at: 90, t: "Building report..." },
-    ];
-    let p = 0;
-    const timer = setInterval(() => {
-      p += 1.5;
-      if (p > 100) p = 100;
-      setProgress(p);
-      const s = stages.find((s) => s.at <= p && s.at > p - 1.5);
-      if (s) setStage(s.t);
-      if (p >= 100) {
-        clearInterval(timer);
-        setTimeout(() => navigate("/dashboard"), 500);
-      }
-    }, 50);
-    return () => clearInterval(timer);
-  }, [showProcess, navigate]);
-
   const smoothScroll = (id: string) => document.getElementById(id)?.scrollIntoView({ behavior: "smooth" });
+  const goToDashboard = () => navigate("/dashboard");
+
+  const navLinks = ["output", "features", "how"];
 
   return (
-    <div style={{ fontFamily: "Inter,-apple-system,BlinkMacSystemFont,sans-serif", background: C.charcoal, color: C.cream, minHeight: "100vh", overflowX: "hidden" }}>
+    <div style={{ fontFamily: "Inter,-apple-system,BlinkMacSystemFont,sans-serif", background: C.bg, color: C.ink, minHeight: "100vh", overflowX: "hidden" }}>
       <ScrollProgress />
 
       <nav className="ss-nav" style={{
-        position: "fixed", top: 0, left: 0, right: 0, zIndex: 100, padding: "0 40px", height: 60,
+        position: "fixed", top: 0, left: 0, right: 0, zIndex: 100, padding: "0 40px", height: 64,
         display: "flex", justifyContent: "space-between", alignItems: "center",
-        background: navSolid || mobileMenuOpen ? "rgba(20,20,20,0.96)" : "transparent",
+        background: navSolid || mobileMenuOpen ? "rgba(255,255,255,0.92)" : "transparent",
         backdropFilter: navSolid || mobileMenuOpen ? "blur(20px)" : "none",
-        borderBottom: navSolid ? "1px solid rgba(196,99,58,0.12)" : "1px solid transparent",
-        transition: "all 0.4s",
+        borderBottom: navSolid ? `1px solid ${C.border}` : "1px solid transparent",
+        transition: "all 0.3s",
       }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div style={{ width: 28, height: 28, background: C.rust, borderRadius: 5, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 16, color: C.cream, flexShrink: 0 }}>S</div>
-          <span style={{ fontWeight: 700, fontSize: 14, letterSpacing: 3, color: C.rust }}>STEELSPEC</span>
+          <div style={{ width: 28, height: 28, background: C.rust, borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 16, color: "#fff", flexShrink: 0 }}>S</div>
+          <span style={{ fontWeight: 700, fontSize: 14, letterSpacing: 3, color: C.ink }}>STEELSPEC</span>
         </div>
 
-        {/* Desktop nav */}
-        <div className="ss-nav-links ss-nav-desktop" style={{ display: "flex" }}>
-          {["upload", "features", "how"].map((id) => (
-            <a key={id} onClick={() => smoothScroll(id)} style={{ color: C.steelLight, fontSize: 13, textDecoration: "none", cursor: "pointer", letterSpacing: 0.5 }}>
-              {id.charAt(0).toUpperCase() + id.slice(1)}
+        <div className="ss-nav-links ss-nav-desktop" style={{ display: "flex", gap: 28, alignItems: "center" }}>
+          {navLinks.map((id) => (
+            <a key={id} onClick={() => smoothScroll(id)} style={{ color: C.ink2, fontSize: 13, textDecoration: "none", cursor: "pointer", letterSpacing: 0.3 }}>
+              {id === "output" ? "Sample Output" : id === "how" ? "How it works" : id.charAt(0).toUpperCase() + id.slice(1)}
             </a>
           ))}
-          <a onClick={() => navigate("/dashboard")} style={{ color: C.rust, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
-            Dashboard →
-          </a>
+          <button onClick={goToDashboard} style={{
+            padding: "9px 18px", background: C.rust, color: "#fff", border: "none", borderRadius: 7,
+            fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "inherit",
+          }}>
+            Go to Dashboard
+          </button>
         </div>
 
-        {/* Mobile hamburger */}
         <button
           className="ss-nav-mobile-btn"
           onClick={() => setMobileMenuOpen((v) => !v)}
-          style={{ display: "none", background: "none", border: "none", color: C.cream, padding: 6, cursor: "pointer" }}
+          style={{ display: "none", background: "none", border: "none", color: C.ink, padding: 6, cursor: "pointer" }}
           aria-label="Toggle menu"
         >
           {mobileMenuOpen ? <X size={22} /> : <Menu size={22} />}
         </button>
       </nav>
 
-      {/* Mobile menu panel */}
       {mobileMenuOpen && (
         <div style={{
-          position: "fixed", top: 60, left: 0, right: 0, zIndex: 99,
-          background: "rgba(20,20,20,0.98)", backdropFilter: "blur(20px)",
-          borderBottom: "1px solid rgba(196,99,58,0.12)",
+          position: "fixed", top: 64, left: 0, right: 0, zIndex: 99,
+          background: "rgba(255,255,255,0.98)", backdropFilter: "blur(20px)",
+          borderBottom: `1px solid ${C.border}`,
           display: "flex", flexDirection: "column", padding: "8px 20px 20px",
         }}>
-          {["upload", "features", "how"].map((id) => (
+          {navLinks.map((id) => (
             <a key={id} onClick={() => { smoothScroll(id); setMobileMenuOpen(false); }}
-              style={{ color: C.steelLight, fontSize: 15, textDecoration: "none", cursor: "pointer", padding: "14px 4px", borderBottom: "1px solid rgba(122,122,122,0.1)" }}>
-              {id.charAt(0).toUpperCase() + id.slice(1)}
+              style={{ color: C.ink2, fontSize: 15, textDecoration: "none", cursor: "pointer", padding: "14px 4px", borderBottom: `1px solid ${C.borderLight}` }}>
+              {id === "output" ? "Sample Output" : id === "how" ? "How it works" : id.charAt(0).toUpperCase() + id.slice(1)}
             </a>
           ))}
-          <a onClick={() => { setMobileMenuOpen(false); navigate("/dashboard"); }}
-            style={{ color: C.rust, fontSize: 15, fontWeight: 600, cursor: "pointer", padding: "14px 4px" }}>
-            Dashboard →
-          </a>
+          <button onClick={() => { setMobileMenuOpen(false); goToDashboard(); }} style={{
+            marginTop: 14, padding: "12px 18px", background: C.rust, color: "#fff", border: "none", borderRadius: 7,
+            fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit",
+          }}>
+            Go to Dashboard
+          </button>
         </div>
       )}
 
@@ -334,9 +418,10 @@ export default function LandingPage() {
         }
       `}</style>
 
-      <section className="ss-hero ss-section" style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", position: "relative", overflow: "hidden" }}>
-        <div style={{ position: "absolute", inset: 0, opacity: 0.04, backgroundImage: "linear-gradient(rgba(196,99,58,0.5) 1px, transparent 1px), linear-gradient(90deg, rgba(196,99,58,0.5) 1px, transparent 1px)", backgroundSize: "60px 60px", animation: "gridPulse 8s ease-in-out infinite" }} />
-        <div style={{ position: "absolute", top: "30%", right: "20%", width: 500, height: 500, borderRadius: "50%", background: "radial-gradient(circle, rgba(196,99,58,0.06) 0%, transparent 70%)", filter: "blur(60px)" }} />
+      {/* HERO */}
+      <section className="ss-hero ss-section" style={{ minHeight: "92vh", display: "flex", alignItems: "center", justifyContent: "center", position: "relative", overflow: "hidden" }}>
+        <div style={{ position: "absolute", inset: 0, opacity: 0.035, backgroundImage: "linear-gradient(rgba(196,99,58,0.6) 1px, transparent 1px), linear-gradient(90deg, rgba(196,99,58,0.6) 1px, transparent 1px)", backgroundSize: "60px 60px" }} />
+        <div style={{ position: "absolute", top: "25%", right: "15%", width: 520, height: 520, borderRadius: "50%", background: "radial-gradient(circle, rgba(196,99,58,0.08) 0%, transparent 70%)", filter: "blur(50px)" }} />
 
         <div className="ss-hero-content">
           <div>
@@ -347,30 +432,31 @@ export default function LandingPage() {
               </div>
             </Reveal>
             <Reveal delay={0.1}>
-              <h1 style={{ fontSize: "clamp(32px, 8vw, 58px)", fontWeight: 800, lineHeight: 1.04, letterSpacing: -2, margin: "0 0 22px" }}>
+              <h1 style={{ fontSize: "clamp(32px, 8vw, 58px)", fontWeight: 800, lineHeight: 1.05, letterSpacing: -2, margin: "0 0 22px", color: C.ink }}>
                 Steel takeoff,<br /><span style={{ color: C.rust }}>automated.</span>
               </h1>
             </Reveal>
             <Reveal delay={0.2}>
-              <p style={{ fontSize: 17, color: C.warmGrey, lineHeight: 1.65, maxWidth: 440, margin: "0 auto 36px" }}>
-                Upload your engineer's IFC or DWG file. Get a complete steel schedule and connection report in minutes — not days.
+              <p style={{ fontSize: 17, color: C.grey, lineHeight: 1.65, maxWidth: 440, margin: "0 auto 36px" }}>
+                Upload your engineer's IFC or DWG file. Get a complete steel schedule and connection report in minutes — not days. Price the job same-day instead of losing an evening to a manual count.
               </p>
             </Reveal>
             <Reveal delay={0.3}>
               <div className="ss-cta-row">
-                <button onClick={() => smoothScroll("upload")} style={{
+                <button onClick={goToDashboard} style={{
                   display: "inline-flex", alignItems: "center", gap: 8, padding: "15px 28px",
-                  background: C.rust, color: C.cream, border: "none", borderRadius: 8, fontSize: 14,
+                  background: C.rust, color: "#fff", border: "none", borderRadius: 8, fontSize: 14,
                   fontWeight: 600, cursor: "pointer", transition: "all 0.25s", fontFamily: "inherit",
+                  boxShadow: "0 6px 20px rgba(196,99,58,0.25)",
                 }}>
-                  Upload your file <ArrowRight size={16} />
+                  Go to Dashboard <ArrowRight size={16} />
                 </button>
-                <button onClick={() => smoothScroll("how")} style={{
+                <button onClick={() => smoothScroll("output")} style={{
                   display: "inline-flex", alignItems: "center", gap: 8, padding: "15px 28px",
-                  background: "transparent", color: C.steelLight, border: `1px solid ${C.steelDark}`,
+                  background: "transparent", color: C.ink2, border: `1px solid ${C.border}`,
                   borderRadius: 8, fontSize: 14, fontWeight: 500, cursor: "pointer", fontFamily: "inherit",
                 }}>
-                  See how it works
+                  See sample output
                 </button>
               </div>
             </Reveal>
@@ -380,82 +466,108 @@ export default function LandingPage() {
           </div>
         </div>
 
-        <div style={{ position: "absolute", bottom: 32, left: "50%", transform: "translateX(-50%)", display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
-          <span style={{ fontSize: 10, color: C.steelDark, letterSpacing: 2, textTransform: "uppercase" }}>Scroll</span>
-          <ChevronDown size={16} color={C.steelDark} style={{ animation: "floatSpec 2s ease-in-out infinite" }} />
+        <div style={{ position: "absolute", bottom: 28, left: "50%", transform: "translateX(-50%)", display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
+          <span style={{ fontSize: 10, color: C.greyLight, letterSpacing: 2, textTransform: "uppercase" }}>Scroll</span>
+          <ChevronDown size={16} color={C.greyLight} style={{ animation: "floatSpec 2s ease-in-out infinite" }} />
         </div>
       </section>
 
-      <section id="upload" className="ss-section" style={{ padding: "100px 40px", background: C.dark, borderTop: "1px solid rgba(196,99,58,0.12)", borderBottom: "1px solid rgba(196,99,58,0.12)" }}>
-        <div style={{ maxWidth: 680, margin: "0 auto", textAlign: "center" }}>
-          <Reveal><div style={{ fontSize: 11, fontWeight: 600, letterSpacing: 3, color: C.rust, textTransform: "uppercase", marginBottom: 12 }}>Upload</div></Reveal>
-          <Reveal delay={0.1}><h2 style={{ fontSize: 30, fontWeight: 700, letterSpacing: -0.5, marginBottom: 12 }}>Drop your structural file</h2></Reveal>
-          <Reveal delay={0.15}><p style={{ fontSize: 15, color: C.warmGrey, lineHeight: 1.6, marginBottom: 40 }}>We'll extract every steel member, section size, length, and connection detail — then generate a professional PDF report.</p></Reveal>
-          <Reveal delay={0.2}>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".ifc,.dwg,.dxf"
-              onChange={handleFileInputChange}
-              style={{ display: "none" }}
-            />
-            <div onClick={handleBrowseClick}
-              onMouseEnter={() => setUploadHover(true)} onMouseLeave={() => setUploadHover(false)}
-              onDragOver={(e) => { e.preventDefault(); setUploadHover(true); }}
-              onDragLeave={() => setUploadHover(false)}
-              onDrop={handleDrop}
-              style={{
-                position: "relative", padding: "52px 32px", borderRadius: 10, cursor: "pointer",
-                border: `1.5px dashed ${fileError ? "#c44" : uploadHover ? C.rust : C.steelDark}`,
-                background: `repeating-linear-gradient(45deg, transparent, transparent 20px, rgba(196,99,58,${uploadHover ? 0.04 : 0.015}) 20px, rgba(196,99,58,${uploadHover ? 0.04 : 0.015}) 21px)`,
-                transition: "all 0.3s", boxShadow: uploadHover ? "0 0 40px rgba(196,99,58,0.08)" : "none",
-              }}>
-              {[{ top: 12, left: 12 }, { top: 12, right: 12 }, { bottom: 12, left: 12 }, { bottom: 12, right: 12 }].map((pos, i) => (
-                <div key={i} style={{ position: "absolute", width: 6, height: 6, borderRadius: "50%", border: `1px solid ${C.steelDark}`, background: `radial-gradient(circle at 35% 35%, ${C.dark3}, ${C.dark})`, ...pos }} />
-              ))}
-              <div style={{ width: 56, height: 56, margin: "0 auto 14px", borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "center", border: `2px solid ${uploadHover ? C.rust : C.steelDark}`, color: uploadHover ? C.rust : C.steel, transition: "all 0.3s" }}>
-                <Upload size={24} strokeWidth={1.5} />
-              </div>
-              <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 6 }}>Drop your file here or click to browse</div>
-              <div style={{ fontSize: 13, color: C.steelLight }}>We'll handle the rest</div>
-              <div style={{ display: "flex", gap: 8, justifyContent: "center", marginTop: 20 }}>
-                {[".IFC", ".DWG", ".DXF"].map((f) => (
-                  <span key={f} style={{ padding: "5px 14px", fontSize: 11, fontWeight: 600, letterSpacing: 1, borderRadius: 5, background: "rgba(196,99,58,0.08)", color: C.rust, border: "1px solid rgba(196,99,58,0.18)" }}>{f}</span>
-                ))}
-              </div>
-            </div>
-            {fileError && (
-              <div style={{ marginTop: 14, padding: "10px 16px", background: "rgba(204,68,68,0.08)", border: "1px solid rgba(204,68,68,0.3)", borderRadius: 8, color: "#e07a7a", fontSize: 13, textAlign: "left" }}>
-                {fileError}
-              </div>
-            )}
-            <div style={{ marginTop: 16, fontSize: 11.5, color: C.steelDark, lineHeight: 1.5 }}>
-              Demo mode — file type is validated, but extraction is simulated. The parsing engine isn't connected to this interface yet.
-            </div>
-          </Reveal>
-        </div>
-      </section>
-
-      <section className="ss-section" style={{ background: C.dark2, borderBottom: "1px solid rgba(196,99,58,0.12)", padding: "52px 40px" }}>
+      {/* STATS */}
+      <section className="ss-section" style={{ background: C.card, borderTop: `1px solid ${C.border}`, borderBottom: `1px solid ${C.border}`, padding: "48px 40px" }}>
         <div style={{ maxWidth: 900, margin: "0 auto", display: "flex", justifyContent: "space-around", textAlign: "center", flexWrap: "wrap", gap: 32 }}>
           {[{ val: 218, suffix: "", label: "Steel sections" }, { val: 29, suffix: "", label: "Fab drawings" }, { val: 100, suffix: "%", label: "NZ/AU standards" }].map((s, i) => (
             <Reveal key={i} delay={i * 0.1}>
               <div>
-                <div style={{ fontSize: 38, fontWeight: 700, color: C.rust, fontFamily: C.mono, letterSpacing: -1 }}><Counter end={s.val} suffix={s.suffix} /></div>
-                <div style={{ fontSize: 11, color: C.steelLight, marginTop: 4, textTransform: "uppercase", letterSpacing: 2, fontWeight: 500 }}>{s.label}</div>
+                <div style={{ fontSize: 36, fontWeight: 700, color: C.rust, fontFamily: C.mono, letterSpacing: -1 }}><Counter end={s.val} suffix={s.suffix} /></div>
+                <div style={{ fontSize: 11, color: C.grey, marginTop: 4, textTransform: "uppercase", letterSpacing: 2, fontWeight: 500 }}>{s.label}</div>
               </div>
             </Reveal>
           ))}
-          <Reveal delay={0.3}><div><div style={{ fontSize: 38, fontWeight: 700, color: C.rust, fontFamily: C.mono, letterSpacing: -1 }}>&lt;2min</div><div style={{ fontSize: 11, color: C.steelLight, marginTop: 4, textTransform: "uppercase", letterSpacing: 2, fontWeight: 500 }}>Processing time</div></div></Reveal>
+          <Reveal delay={0.3}><div><div style={{ fontSize: 36, fontWeight: 700, color: C.rust, fontFamily: C.mono, letterSpacing: -1 }}>&lt;2min</div><div style={{ fontSize: 11, color: C.grey, marginTop: 4, textTransform: "uppercase", letterSpacing: 2, fontWeight: 500 }}>Processing time</div></div></Reveal>
         </div>
       </section>
 
-      <section id="features" className="ss-section" style={{ padding: "100px 40px", background: C.charcoal }}>
+      {/* SAMPLE OUTPUT */}
+      <section id="output" className="ss-section" style={{ padding: "110px 40px", background: C.bg }}>
+        <div style={{ maxWidth: 1080, margin: "0 auto" }}>
+          <div style={{ textAlign: "center", marginBottom: 64 }}>
+            <Reveal><div style={{ fontSize: 11, fontWeight: 600, letterSpacing: 3, color: C.rust, textTransform: "uppercase", marginBottom: 12, display: "flex", justifyContent: "center", alignItems: "center", gap: 8 }}><span style={{ width: 20, height: 1, background: C.rust }} />Sample Output</div></Reveal>
+            <Reveal delay={0.1}><h2 style={{ fontSize: 32, fontWeight: 700, letterSpacing: -0.6, marginBottom: 14, color: C.ink }}>See exactly what you get</h2></Reveal>
+            <Reveal delay={0.15}><p style={{ fontSize: 15.5, color: C.grey, maxWidth: 560, margin: "0 auto", lineHeight: 1.65 }}>Three parts to every takeoff — the schedule you quote from, the connection detail your fabricator needs, and the drawing your workshop cuts to.</p></Reveal>
+          </div>
+
+          {/* Row 1: Schedule */}
+          <div className="ss-output-row">
+            <Reveal direction="left">
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1.5, color: C.rust, textTransform: "uppercase", marginBottom: 10 }}>01 · Steel Schedule</div>
+                <h3 style={{ fontSize: 24, fontWeight: 700, marginBottom: 14, color: C.ink, letterSpacing: -0.4 }}>Every member, itemised and weighed</h3>
+                <p style={{ fontSize: 14.5, color: C.grey, lineHeight: 1.7, marginBottom: 18 }}>
+                  Mark numbers, sections, lengths, quantities, and weights — extracted straight from the engineer's model and matched against 218 NZ/AU steel sections. No manual counting, no misread callouts.
+                </p>
+                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  {["Total tonnage calculated instantly", "Grouped by section family and member type", "Ready to quote from the same day it lands"].map((b) => (
+                    <div key={b} style={{ display: "flex", alignItems: "flex-start", gap: 9, fontSize: 13.5, color: C.ink2 }}>
+                      <Check size={15} color={C.rust} strokeWidth={2.5} style={{ marginTop: 2, flexShrink: 0 }} />{b}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </Reveal>
+            <Reveal delay={0.1} direction="right"><ScheduleMock /></Reveal>
+          </div>
+
+          {/* Row 2: Connection */}
+          <div className="ss-output-row ss-output-row-reverse">
+            <Reveal direction="right">
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1.5, color: C.rust, textTransform: "uppercase", marginBottom: 10 }}>02 · Connection Report</div>
+                <h3 style={{ fontSize: 24, fontWeight: 700, marginBottom: 14, color: C.ink, letterSpacing: -0.4 }}>Bolts, plates and welds — already decided</h3>
+                <p style={{ fontSize: 14.5, color: C.grey, lineHeight: 1.7, marginBottom: 18 }}>
+                  Every connection the engineer specified — bolt size and grade, plate dimensions, weld callouts — pulled out and organised by grid reference, so nothing gets missed between drawing and workshop.
+                </p>
+                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  {["Reports what's already specified — no design decisions made for you", "Cross-referenced to the members it connects", "Schematic diagram alongside every bolt group"].map((b) => (
+                    <div key={b} style={{ display: "flex", alignItems: "flex-start", gap: 9, fontSize: 13.5, color: C.ink2 }}>
+                      <Check size={15} color={C.rust} strokeWidth={2.5} style={{ marginTop: 2, flexShrink: 0 }} />{b}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </Reveal>
+            <Reveal delay={0.1} direction="left"><ConnectionMock /></Reveal>
+          </div>
+
+          {/* Row 3: Fab drawing */}
+          <div className="ss-output-row">
+            <Reveal direction="left">
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1.5, color: C.rust, textTransform: "uppercase", marginBottom: 10 }}>03 · Fabrication Drawing</div>
+                <h3 style={{ fontSize: 24, fontWeight: 700, marginBottom: 14, color: C.ink, letterSpacing: -0.4 }}>Shop-ready, per mark</h3>
+                <p style={{ fontSize: 14.5, color: C.grey, lineHeight: 1.7, marginBottom: 18 }}>
+                  A dedicated drawing for every mark — member elevation, fitted plates, bolt hole patterns, and section views — laid out the way your workshop already reads them.
+                </p>
+                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  {["One page per mark, dimensioned and labelled", "Matches standard NZ fabrication drawing conventions", "Roadmap feature — available on eligible projects"].map((b) => (
+                    <div key={b} style={{ display: "flex", alignItems: "flex-start", gap: 9, fontSize: 13.5, color: C.ink2 }}>
+                      <Check size={15} color={C.rust} strokeWidth={2.5} style={{ marginTop: 2, flexShrink: 0 }} />{b}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </Reveal>
+            <Reveal delay={0.1} direction="right"><FabDrawingMock /></Reveal>
+          </div>
+        </div>
+      </section>
+
+      {/* FEATURES */}
+      <section id="features" className="ss-section" style={{ padding: "100px 40px", background: C.card, borderTop: `1px solid ${C.border}` }}>
         <div style={{ maxWidth: 1000, margin: "0 auto" }}>
           <div style={{ textAlign: "center", marginBottom: 56 }}>
             <Reveal><div style={{ fontSize: 11, fontWeight: 600, letterSpacing: 3, color: C.rust, textTransform: "uppercase", marginBottom: 12 }}>Features</div></Reveal>
-            <Reveal delay={0.1}><h2 style={{ fontSize: 30, fontWeight: 700, letterSpacing: -0.5, marginBottom: 12 }}>Built for fabricators</h2></Reveal>
-            <Reveal delay={0.15}><p style={{ fontSize: 15, color: C.warmGrey, maxWidth: 460, margin: "0 auto" }}>Every feature designed around how NZ steel fabricators and estimators actually work.</p></Reveal>
+            <Reveal delay={0.1}><h2 style={{ fontSize: 30, fontWeight: 700, letterSpacing: -0.5, marginBottom: 12, color: C.ink }}>Built for fabricators</h2></Reveal>
+            <Reveal delay={0.15}><p style={{ fontSize: 15, color: C.grey, maxWidth: 460, margin: "0 auto" }}>Every feature designed around how NZ steel fabricators and estimators actually work.</p></Reveal>
           </div>
           <div className="ss-features-grid">
             <FeatureCard icon={Zap} title="Automatic extraction" desc="Steel members, sections, lengths, and weights pulled directly from your engineer's model. No manual data entry." delay={0.05} />
@@ -468,72 +580,99 @@ export default function LandingPage() {
         </div>
       </section>
 
-      <section id="how" className="ss-section" style={{ padding: "100px 40px", background: C.dark, borderTop: "1px solid rgba(196,99,58,0.12)" }}>
+      {/* HOW IT WORKS */}
+      <section id="how" className="ss-section" style={{ padding: "100px 40px", background: C.bg, borderTop: `1px solid ${C.border}` }}>
         <div style={{ textAlign: "center", marginBottom: 56 }}>
           <Reveal><div style={{ fontSize: 11, fontWeight: 600, letterSpacing: 3, color: C.rust, textTransform: "uppercase", marginBottom: 12 }}>Process</div></Reveal>
-          <Reveal delay={0.1}><h2 style={{ fontSize: 30, fontWeight: 700, letterSpacing: -0.5 }}>Three steps to your steel schedule</h2></Reveal>
+          <Reveal delay={0.1}><h2 style={{ fontSize: 30, fontWeight: 700, letterSpacing: -0.5, color: C.ink }}>Three steps to your steel schedule</h2></Reveal>
         </div>
         <div className="ss-steps">
-          <div style={{ position: "absolute", top: 26, left: 80, right: 80, height: 1, background: `linear-gradient(90deg, ${C.rust}, ${C.steelDark}, ${C.rust})`, opacity: 0.25 }} />
+          <div style={{ position: "absolute", top: 26, left: 80, right: 80, height: 1, background: `linear-gradient(90deg, transparent, ${C.rustBorder}, transparent)` }} />
           <Step num="1" title="Upload" desc="Drop your IFC or DWG/DXF file from the structural engineer" delay={0.1} />
           <Step num="2" title="Extract" desc="We parse every steel member, section, and connection detail automatically" delay={0.2} />
           <Step num="3" title="Download" desc="Review the schedule on screen, then download your professional PDF report" delay={0.3} />
         </div>
       </section>
 
-      <section className="ss-section" style={{ padding: "100px 40px", background: C.charcoal, borderTop: "1px solid rgba(196,99,58,0.12)" }}>
-        <div style={{ maxWidth: 900, margin: "0 auto", textAlign: "center" }}>
-          <Reveal><div style={{ fontSize: 11, fontWeight: 600, letterSpacing: 3, color: C.rust, textTransform: "uppercase", marginBottom: 12 }}>Output</div></Reveal>
-          <Reveal delay={0.1}><h2 style={{ fontSize: 30, fontWeight: 700, letterSpacing: -0.5, marginBottom: 12 }}>What you get</h2></Reveal>
-          <Reveal delay={0.15}><p style={{ fontSize: 15, color: C.warmGrey, maxWidth: 500, margin: "0 auto 40px" }}>A complete steel package — schedule, connections, and fabrication drawings.</p></Reveal>
+      {/* CTA */}
+      <section className="ss-section" style={{ padding: "90px 40px", textAlign: "center", background: C.rust, position: "relative", overflow: "hidden" }}>
+        <div style={{ position: "absolute", inset: 0, opacity: 0.08, backgroundImage: "linear-gradient(#fff 1px, transparent 1px), linear-gradient(90deg, #fff 1px, transparent 1px)", backgroundSize: "50px 50px" }} />
+        <div style={{ position: "relative" }}>
+          <Reveal><div style={{ fontSize: 11, fontWeight: 600, letterSpacing: 3, color: "rgba(255,255,255,0.8)", textTransform: "uppercase", marginBottom: 12 }}>Ready?</div></Reveal>
+          <Reveal delay={0.1}><h2 style={{ fontSize: 32, fontWeight: 700, marginBottom: 28, letterSpacing: -0.5, color: "#fff" }}>Stop counting steel by hand</h2></Reveal>
           <Reveal delay={0.2}>
-            <div className="ss-output-grid">
-              {[
-                { title: "Steel Schedule", items: ["Member marks & sections", "Lengths & quantities", "Weight per member", "Total tonnage"] },
-                { title: "Connection Report", items: ["Bolt sizes & grades", "Plate dimensions", "Weld specifications", "Grid references"] },
-                { title: "Fab Drawings", items: ["Member elevations", "Fitted plate details", "Bolt hole patterns", "Section views"] },
-              ].map((card, i) => (
-                <div key={i} style={{ padding: "28px 24px", borderRadius: 10, textAlign: "left", background: C.dark, border: "1px solid rgba(122,122,122,0.12)" }}>
-                  <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 16, color: C.rust }}>{card.title}</h3>
-                  {card.items.map((item, j) => (
-                    <div key={j} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10, fontSize: 13, color: C.warmGrey }}>
-                      <Check size={14} color={C.rust} strokeWidth={2} />{item}
-                    </div>
-                  ))}
-                </div>
-              ))}
-            </div>
+            <button onClick={goToDashboard} style={{
+              padding: "16px 36px", background: "#fff", color: C.rust, border: "none", borderRadius: 8,
+              fontSize: 16, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", boxShadow: "0 8px 24px rgba(0,0,0,0.15)",
+            }}>
+              Go to Dashboard <span style={{ marginLeft: 6 }}>→</span>
+            </button>
           </Reveal>
         </div>
       </section>
 
-      <section className="ss-section" style={{ padding: "80px 40px", textAlign: "center", background: C.dark, borderTop: "1px solid rgba(196,99,58,0.12)" }}>
-        <Reveal><div style={{ fontSize: 11, fontWeight: 600, letterSpacing: 3, color: C.rust, textTransform: "uppercase", marginBottom: 12 }}>Ready?</div></Reveal>
-        <Reveal delay={0.1}><h2 style={{ fontSize: 30, fontWeight: 700, marginBottom: 28, letterSpacing: -0.5 }}>Stop counting steel by hand</h2></Reveal>
-        <Reveal delay={0.2}>
-          <button onClick={() => smoothScroll("upload")} style={{ padding: "16px 36px", background: C.rust, color: C.cream, border: "none", borderRadius: 8, fontSize: 16, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
-            Upload your file <span style={{ marginLeft: 6 }}>→</span>
-          </button>
-        </Reveal>
-      </section>
-
-      <footer style={{ padding: "32px 40px", borderTop: "1px solid rgba(122,122,122,0.08)", textAlign: "center", fontSize: 12, color: C.steelDark }}>
-        <span style={{ color: C.rust, fontWeight: 700, letterSpacing: 2, fontSize: 11 }}>STEELSPEC</span>
-        <div style={{ marginTop: 6 }}>Structural steel takeoff — automated. Built in Auckland, New Zealand.</div>
-      </footer>
-
-      {showProcess && (
-        <div style={{ position: "fixed", inset: 0, zIndex: 200, background: "rgba(14,14,14,0.95)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", backdropFilter: "blur(12px)" }}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: C.rust, letterSpacing: 3, marginBottom: 32 }}>STEELSPEC</div>
-          <div style={{ width: 56, height: 56, borderRadius: "50%", border: `2px solid ${C.dark3}`, borderTopColor: C.rust, animation: "spin 1s linear infinite", marginBottom: 24 }} />
-          <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 4 }}>{stage}</div>
-          <div style={{ fontSize: 13, color: C.steelLight, marginBottom: 20 }}>{selectedFile?.name ?? "structural_model.ifc"}</div>
-          <div style={{ width: 300, height: 4, background: C.dark3, borderRadius: 2, overflow: "hidden" }}>
-            <div style={{ height: "100%", width: `${progress}%`, background: `linear-gradient(90deg, ${C.rustDark}, ${C.rustLight})`, borderRadius: 2, transition: "width 0.15s linear" }} />
-          </div>
-          <div style={{ fontSize: 12, color: C.steelDark, marginTop: 8 }}>{Math.round(progress)}%</div>
-        </div>
-      )}
+      {/* FOOTER */}
+      <Footer />
     </div>
+  );
+}
+
+// === FOOTER (dark, GoodFi-style) ===
+function Footer() {
+  const linkCol = (title: string, links: string[]) => (
+    <div>
+      <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", color: "rgba(245,237,228,0.4)", marginBottom: 16 }}>{title}</div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 11 }}>
+        {links.map((l) => (
+          <a key={l} style={{ fontSize: 13.5, color: "rgba(245,237,228,0.75)", textDecoration: "none", cursor: "pointer" }}
+            onMouseEnter={(e) => (e.currentTarget.style.color = "#e8854a")}
+            onMouseLeave={(e) => (e.currentTarget.style.color = "rgba(245,237,228,0.75)")}>
+            {l}
+          </a>
+        ))}
+      </div>
+    </div>
+  );
+
+  return (
+    <footer style={{ background: "#141414", color: "#f5ede4", padding: "72px 40px 0" }}>
+      <div style={{ maxWidth: 1100, margin: "0 auto" }}>
+        <div className="ss-footer-grid">
+          <div style={{ maxWidth: 280 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
+              <div style={{ width: 28, height: 28, background: "#c4633a", borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 16, color: "#f5ede4" }}>S</div>
+              <span style={{ fontWeight: 700, fontSize: 14, letterSpacing: 3, color: "#c4633a" }}>STEELSPEC</span>
+            </div>
+            <p style={{ fontSize: 13, color: "rgba(245,237,228,0.6)", lineHeight: 1.7, marginBottom: 20 }}>
+              Structural steel takeoff, automated. Upload your engineer's model, get a fabrication-ready steel schedule in minutes.
+            </p>
+            <div style={{ display: "flex", gap: 10 }}>
+              {[LinkedInIcon, InstagramIcon, FacebookIcon, Mail].map((Icon, i) => (
+                <a key={i} style={{
+                  width: 34, height: 34, borderRadius: 8, background: "rgba(245,237,228,0.06)",
+                  border: "1px solid rgba(245,237,228,0.12)", display: "flex", alignItems: "center",
+                  justifyContent: "center", color: "rgba(245,237,228,0.7)", cursor: "pointer", transition: "all 0.2s",
+                }}
+                  onMouseEnter={(e) => { e.currentTarget.style.background = "#c4633a"; e.currentTarget.style.color = "#fff"; e.currentTarget.style.borderColor = "#c4633a"; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(245,237,228,0.06)"; e.currentTarget.style.color = "rgba(245,237,228,0.7)"; e.currentTarget.style.borderColor = "rgba(245,237,228,0.12)"; }}>
+                  <Icon size={15} />
+                </a>
+              ))}
+            </div>
+          </div>
+
+          {linkCol("Product", ["Sample Output", "Features", "How it works", "Dashboard"])}
+          {linkCol("Company", ["About", "Contact", "Support"])}
+          {linkCol("Legal", ["Privacy Policy", "Terms of Service"])}
+        </div>
+
+        <div style={{ borderTop: "1px solid rgba(245,237,228,0.1)", marginTop: 56, padding: "24px 0", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
+          <span style={{ fontSize: 12.5, color: "rgba(245,237,228,0.45)" }}>© {new Date().getFullYear()} SteelSpec. All rights reserved.</span>
+          <span style={{ fontSize: 12.5, color: "rgba(245,237,228,0.45)", display: "flex", alignItems: "center", gap: 6 }}>
+            Made in Aotearoa <span style={{ fontSize: 14 }}>🇳🇿</span>
+          </span>
+        </div>
+      </div>
+    </footer>
   );
 }
