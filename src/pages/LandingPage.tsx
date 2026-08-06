@@ -599,14 +599,14 @@ export default function LandingPage() {
                   fontWeight: 600, cursor: "pointer", transition: "all 0.25s", fontFamily: "inherit",
                   boxShadow: "0 6px 20px rgba(196,99,58,0.25)",
                 }}>
-                  Go to Dashboard <ArrowRight size={16} />
+                  Sign up now <ArrowRight size={16} />
                 </button>
                 <button onClick={() => smoothScroll("output")} style={{
                   display: "inline-flex", alignItems: "center", gap: 8, padding: "15px 28px",
                   background: "transparent", color: C.ink2, border: `1px solid ${C.border}`,
                   borderRadius: 8, fontSize: 14, fontWeight: 500, cursor: "pointer", fontFamily: "inherit",
                 }}>
-                  See sample output
+                  Learn more <ArrowUp size={16} />
                 </button>
               </div>
             </Reveal>
