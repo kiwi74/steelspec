@@ -372,13 +372,17 @@ function FloatingInput({
 }
 
 // === AUTH POPOVER (sign in / sign up) ===
-function AuthPopover({ onClose, align = "right" }: { onClose: () => void; align?: "left" | "right" | "center" }) {
-  const [mode, setMode] = useState<"signup" | "signin">("signup");
+function AuthPopover({ onClose, align = "right", defaultMode = "signup" }: { onClose: () => void; align?: "left" | "right" | "center"; defaultMode?: "signup" | "signin" }) {
+  const [mode, setMode] = useState<"signup" | "signin">(defaultMode);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const navigate = useNavigate();
   const popRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setMode(defaultMode);
+  }, [defaultMode]);
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -466,6 +470,11 @@ export default function LandingPage() {
   const [navSolid, setNavSolid] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [authOpen, setAuthOpen] = useState(false);
+  const [authMode, setAuthMode] = useState<"signup" | "signin">("signup");
+  const openAuth = (mode: "signup" | "signin") => {
+    setAuthMode(mode);
+    setAuthOpen((v) => (authMode === mode ? !v : true));
+  };
 
   useEffect(() => {
     const handler = () => setNavSolid(window.scrollY > 20);
@@ -501,13 +510,16 @@ export default function LandingPage() {
               {id === "output" ? "Sample Output" : id === "how" ? "How it works" : id.charAt(0).toUpperCase() + id.slice(1)}
             </a>
           ))}
-          <button onClick={() => setAuthOpen((v) => !v)} style={{
+          <a onClick={() => openAuth("signin")} style={{ color: C.ink2, fontSize: 13, fontWeight: 600, textDecoration: "none", cursor: "pointer", letterSpacing: 0.3 }}>
+            Sign In
+          </a>
+          <button onClick={() => openAuth("signup")} style={{
             padding: "9px 18px", background: C.rust, color: "#fff", border: "none", borderRadius: 7,
             fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "inherit",
           }}>
-            Dashboard
+            Sign Up
           </button>
-          {authOpen && <AuthPopover onClose={() => setAuthOpen(false)} align="right" />}
+          {authOpen && <AuthPopover onClose={() => setAuthOpen(false)} align="right" defaultMode={authMode} />}
         </div>
 
         <button
@@ -533,14 +545,18 @@ export default function LandingPage() {
               {id === "output" ? "Sample Output" : id === "how" ? "How it works" : id.charAt(0).toUpperCase() + id.slice(1)}
             </a>
           ))}
+          <a onClick={() => { openAuth("signin"); }}
+            style={{ color: C.ink2, fontSize: 15, fontWeight: 600, textDecoration: "none", cursor: "pointer", padding: "14px 4px", borderBottom: `1px solid ${C.borderLight}` }}>
+            Sign In
+          </a>
           <div style={{ position: "relative", marginTop: 14 }}>
-            <button onClick={() => setAuthOpen((v) => !v)} style={{
+            <button onClick={() => openAuth("signup")} style={{
               width: "100%", padding: "12px 18px", background: C.rust, color: "#fff", border: "none", borderRadius: 7,
               fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit",
             }}>
-              Dashboard
+              Sign Up
             </button>
-            {authOpen && <AuthPopover onClose={() => setAuthOpen(false)} align="center" />}
+            {authOpen && <AuthPopover onClose={() => setAuthOpen(false)} align="center" defaultMode={authMode} />}
           </div>
         </div>
       )}
