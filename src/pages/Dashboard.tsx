@@ -93,25 +93,54 @@ function ProjectsTable({ rows, onOpen, compact }: { rows: Project[]; onOpen: (p:
   );
 }
 
-function UploadZone({ big, onClick }: { big?: boolean; onClick: () => void }) {
+const ACCEPTED_EXTENSIONS = [".ifc", ".dwg", ".dxf"];
+
+function UploadZone({ big, onFileSelected }: { big?: boolean; onFileSelected: (file: File) => void }) {
   const [drag, setDrag] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const validate = (file: File | undefined) => {
+    if (!file) return;
+    const isValid = ACCEPTED_EXTENSIONS.some((ext) => file.name.toLowerCase().endsWith(ext));
+    if (!isValid) {
+      setError(`"${file.name}" isn't supported. Upload an .IFC, .DWG, or .DXF file.`);
+      return;
+    }
+    setError(null);
+    onFileSelected(file);
+  };
+
   return (
-    <div onClick={onClick}
-      onDragOver={(e) => { e.preventDefault(); setDrag(true); }}
-      onDragLeave={() => setDrag(false)}
-      onDrop={(e) => { e.preventDefault(); setDrag(false); onClick(); }}
-      style={{
-        margin: big ? 0 : 20, padding: big ? "52px 24px" : "34px 20px",
-        border: `1.5px dashed ${drag ? C.rust : C.border}`, borderRadius: 10, textAlign: "center", cursor: "pointer",
-        background: drag ? C.rustBg : `repeating-linear-gradient(45deg,transparent,transparent 20px,rgba(196,99,58,.012) 20px,rgba(196,99,58,.012) 21px)`,
-        transition: "all .25s",
-      }}>
-      <div style={{ width: 46, height: 46, margin: "0 auto 12px", borderRadius: 10, border: `2px solid ${drag ? C.rust : C.border}`, color: drag ? C.rust : C.grey, display: "flex", alignItems: "center", justifyContent: "center", transition: "all .25s" }}>
-        <Upload size={20} />
+    <div>
+      <input
+        id="ss-dash-file-input"
+        type="file"
+        accept=".ifc,.dwg,.dxf"
+        onChange={(e) => { validate(e.target.files?.[0]); e.target.value = ""; }}
+        style={{ display: "none" }}
+      />
+      <div onClick={() => document.getElementById("ss-dash-file-input")?.click()}
+        onDragOver={(e) => { e.preventDefault(); setDrag(true); }}
+        onDragLeave={() => setDrag(false)}
+        onDrop={(e) => { e.preventDefault(); setDrag(false); validate(e.dataTransfer.files?.[0]); }}
+        style={{
+          margin: big ? 0 : 20, padding: big ? "52px 24px" : "34px 20px",
+          border: `1.5px dashed ${error ? "#c44" : drag ? C.rust : C.border}`, borderRadius: 10, textAlign: "center", cursor: "pointer",
+          background: drag ? C.rustBg : `repeating-linear-gradient(45deg,transparent,transparent 20px,rgba(196,99,58,.012) 20px,rgba(196,99,58,.012) 21px)`,
+          transition: "all .25s",
+        }}>
+        <div style={{ width: 46, height: 46, margin: "0 auto 12px", borderRadius: 10, border: `2px solid ${drag ? C.rust : C.border}`, color: drag ? C.rust : C.grey, display: "flex", alignItems: "center", justifyContent: "center", transition: "all .25s" }}>
+          <Upload size={20} />
+        </div>
+        <div style={{ fontSize: 14.5, fontWeight: 600, marginBottom: 4 }}>Drop your structural file here</div>
+        <div style={{ fontSize: 12.5, color: C.grey, marginBottom: 14 }}>or click to browse — we'll extract every member and connection</div>
+        <div style={{ display: "flex", gap: 7, justifyContent: "center" }}>{fmtTag("IFC")}{fmtTag("DWG")}{fmtTag("DXF")}</div>
       </div>
-      <div style={{ fontSize: 14.5, fontWeight: 600, marginBottom: 4 }}>Drop your structural file here</div>
-      <div style={{ fontSize: 12.5, color: C.grey, marginBottom: 14 }}>or click to browse — we'll extract every member and connection</div>
-      <div style={{ display: "flex", gap: 7, justifyContent: "center" }}>{fmtTag("IFC")}{fmtTag("DWG")}{fmtTag("DXF")}</div>
+      {error && (
+        <div style={{ margin: big ? "12px 0 0" : "12px 20px 0", padding: "10px 14px", background: "rgba(204,68,68,0.06)", border: "1px solid rgba(204,68,68,0.25)", borderRadius: 8, color: "#c44", fontSize: 12.5, textAlign: "left" }}>
+          {error}
+        </div>
+      )}
     </div>
   );
 }
@@ -124,6 +153,12 @@ export default function Dashboard() {
   const [proc, setProc] = useState(false);
   const [prog, setProg] = useState(0);
   const [stage, setStage] = useState("Parsing model file...");
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+
+  const handleFileSelected = (file: File) => {
+    setSelectedFile(file);
+    setProc(true);
+  };
   const [payModal, setPayModal] = useState<{ name: string; ref: string } | null>(null);
   const [payProcessing, setPayProcessing] = useState(false);
   const [paySuccess, setPaySuccess] = useState(false);
@@ -252,7 +287,7 @@ export default function Dashboard() {
                   <ProjectsTable rows={PROJECTS.slice(0, 4)} onOpen={setModal} compact />
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-                  <div style={panel}><div style={panelHead}><h3 style={{ fontSize: 14, fontWeight: 600 }}>Quick takeoff</h3></div><UploadZone onClick={() => setProc(true)} /></div>
+                  <div style={panel}><div style={panelHead}><h3 style={{ fontSize: 14, fontWeight: 600 }}>Quick takeoff</h3></div><UploadZone onFileSelected={handleFileSelected} /></div>
                   <div style={panel}>
                     <div style={panelHead}><h3 style={{ fontSize: 14, fontWeight: 600 }}>Monthly tonnage</h3></div>
                     <div style={{ display: "flex", alignItems: "flex-end", gap: 10, height: 130, padding: "20px 20px 8px" }}>
@@ -283,7 +318,7 @@ export default function Dashboard() {
             <>
               <div style={{ padding: "20px 0 24px" }}><h1 style={{ fontSize: 21, fontWeight: 700 }}>New Takeoff</h1><p style={{ fontSize: 13, color: C.grey, marginTop: 2 }}>Upload the engineer's model file to start extraction.</p></div>
               <div style={{ ...panel, padding: 24 }}>
-                <UploadZone big onClick={() => setProc(true)} />
+                <UploadZone big onFileSelected={handleFileSelected} />
                 <div className="ss-upload-info-grid" style={{ marginTop: 20 }}>
                   {[["IFC / BIM", "Highest accuracy — direct from Revit, Tekla, or ArchiCAD."], ["DWG / DXF", "CAD drawings — extraction with a quick review step."], ["What you get", "Steel schedule, connection report, and total tonnage as PDF."]].map(([t, d], i) => (
                     <div key={i} style={{ padding: "14px 16px", background: C.bg, borderRadius: 10, border: `1px solid ${C.borderLight}` }}>
@@ -291,6 +326,9 @@ export default function Dashboard() {
                       <div style={{ fontSize: 12, color: C.grey, lineHeight: 1.55 }}>{d}</div>
                     </div>
                   ))}
+                </div>
+                <div style={{ marginTop: 16, fontSize: 11.5, color: C.grey, lineHeight: 1.5 }}>
+                  Demo mode — file type is validated, but extraction is simulated. The parsing engine isn't connected to this interface yet.
                 </div>
               </div>
             </>
@@ -452,7 +490,7 @@ export default function Dashboard() {
               <div style={{ fontSize: 12, fontWeight: 700, color: C.rust, letterSpacing: 3, marginBottom: 24 }}>STEELSPEC</div>
               <div style={{ width: 44, height: 44, borderRadius: "50%", border: `2.5px solid ${C.border}`, borderTopColor: C.rust, animation: "spin 1s linear infinite", margin: "0 auto 18px" }} />
               <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 3 }}>{stage}</div>
-              <div style={{ fontSize: 12.5, color: C.grey }}>Selby_Square_Structural.dxf</div>
+              <div style={{ fontSize: 12.5, color: C.grey }}>{selectedFile?.name ?? "structural_model.ifc"}</div>
               <div style={{ width: 280, height: 5, background: C.borderLight, borderRadius: 3, overflow: "hidden", margin: "16px auto 6px" }}>
                 <div style={{ height: "100%", background: `linear-gradient(90deg,${C.rustDark},${C.rustLight})`, borderRadius: 3, width: `${prog}%`, transition: "width .15s linear" }} />
               </div>

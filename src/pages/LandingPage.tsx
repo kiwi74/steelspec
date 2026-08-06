@@ -205,6 +205,36 @@ export default function LandingPage() {
   const [showProcess, setShowProcess] = useState(false);
   const [progress, setProgress] = useState(0);
   const [stage, setStage] = useState("Parsing model file...");
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [fileError, setFileError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const ACCEPTED_EXTENSIONS = [".ifc", ".dwg", ".dxf"];
+
+  const validateAndSetFile = (file: File | undefined) => {
+    if (!file) return;
+    const name = file.name.toLowerCase();
+    const isValid = ACCEPTED_EXTENSIONS.some((ext) => name.endsWith(ext));
+    if (!isValid) {
+      setFileError(`"${file.name}" isn't a supported file type. Please upload an .IFC, .DWG, or .DXF file.`);
+      setSelectedFile(null);
+      return;
+    }
+    setFileError(null);
+    setSelectedFile(file);
+    setShowProcess(true);
+  };
+
+  const handleBrowseClick = () => fileInputRef.current?.click();
+  const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    validateAndSetFile(e.target.files?.[0]);
+    e.target.value = ""; // allow re-selecting the same file later
+  };
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setUploadHover(false);
+    validateAndSetFile(e.dataTransfer.files?.[0]);
+  };
 
   useEffect(() => {
     const handler = () => setNavSolid(window.scrollY > 60);
@@ -362,14 +392,21 @@ export default function LandingPage() {
           <Reveal delay={0.1}><h2 style={{ fontSize: 30, fontWeight: 700, letterSpacing: -0.5, marginBottom: 12 }}>Drop your structural file</h2></Reveal>
           <Reveal delay={0.15}><p style={{ fontSize: 15, color: C.warmGrey, lineHeight: 1.6, marginBottom: 40 }}>We'll extract every steel member, section size, length, and connection detail — then generate a professional PDF report.</p></Reveal>
           <Reveal delay={0.2}>
-            <div onClick={() => setShowProcess(true)}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".ifc,.dwg,.dxf"
+              onChange={handleFileInputChange}
+              style={{ display: "none" }}
+            />
+            <div onClick={handleBrowseClick}
               onMouseEnter={() => setUploadHover(true)} onMouseLeave={() => setUploadHover(false)}
               onDragOver={(e) => { e.preventDefault(); setUploadHover(true); }}
               onDragLeave={() => setUploadHover(false)}
-              onDrop={(e) => { e.preventDefault(); setUploadHover(false); setShowProcess(true); }}
+              onDrop={handleDrop}
               style={{
                 position: "relative", padding: "52px 32px", borderRadius: 10, cursor: "pointer",
-                border: `1.5px dashed ${uploadHover ? C.rust : C.steelDark}`,
+                border: `1.5px dashed ${fileError ? "#c44" : uploadHover ? C.rust : C.steelDark}`,
                 background: `repeating-linear-gradient(45deg, transparent, transparent 20px, rgba(196,99,58,${uploadHover ? 0.04 : 0.015}) 20px, rgba(196,99,58,${uploadHover ? 0.04 : 0.015}) 21px)`,
                 transition: "all 0.3s", boxShadow: uploadHover ? "0 0 40px rgba(196,99,58,0.08)" : "none",
               }}>
@@ -386,6 +423,14 @@ export default function LandingPage() {
                   <span key={f} style={{ padding: "5px 14px", fontSize: 11, fontWeight: 600, letterSpacing: 1, borderRadius: 5, background: "rgba(196,99,58,0.08)", color: C.rust, border: "1px solid rgba(196,99,58,0.18)" }}>{f}</span>
                 ))}
               </div>
+            </div>
+            {fileError && (
+              <div style={{ marginTop: 14, padding: "10px 16px", background: "rgba(204,68,68,0.08)", border: "1px solid rgba(204,68,68,0.3)", borderRadius: 8, color: "#e07a7a", fontSize: 13, textAlign: "left" }}>
+                {fileError}
+              </div>
+            )}
+            <div style={{ marginTop: 16, fontSize: 11.5, color: C.steelDark, lineHeight: 1.5 }}>
+              Demo mode — file type is validated, but extraction is simulated. The parsing engine isn't connected to this interface yet.
             </div>
           </Reveal>
         </div>
@@ -482,7 +527,7 @@ export default function LandingPage() {
           <div style={{ fontSize: 13, fontWeight: 700, color: C.rust, letterSpacing: 3, marginBottom: 32 }}>STEELSPEC</div>
           <div style={{ width: 56, height: 56, borderRadius: "50%", border: `2px solid ${C.dark3}`, borderTopColor: C.rust, animation: "spin 1s linear infinite", marginBottom: 24 }} />
           <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 4 }}>{stage}</div>
-          <div style={{ fontSize: 13, color: C.steelLight, marginBottom: 20 }}>WA-2026-0847_Structural.ifc</div>
+          <div style={{ fontSize: 13, color: C.steelLight, marginBottom: 20 }}>{selectedFile?.name ?? "structural_model.ifc"}</div>
           <div style={{ width: 300, height: 4, background: C.dark3, borderRadius: 2, overflow: "hidden" }}>
             <div style={{ height: "100%", width: `${progress}%`, background: `linear-gradient(90deg, ${C.rustDark}, ${C.rustLight})`, borderRadius: 2, transition: "width 0.15s linear" }} />
           </div>
