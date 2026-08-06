@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Upload, ArrowRight, Layers, FileText, Shield, RefreshCw,
-  BarChart3, Zap, ChevronDown, Check,
+  BarChart3, Zap, ChevronDown, Check, Menu, X,
 } from "lucide-react";
 import { theme as C } from "../lib/theme";
 
@@ -108,14 +108,16 @@ function SteelFrame() {
 
   return (
     <div ref={containerRef} onMouseMove={handleMouseMove}
-      style={{ width: "100%", height: 420, display: "flex", justifyContent: "center", alignItems: "center", perspective: 900 }}>
+      style={{ width: "100%", height: 420, display: "flex", justifyContent: "center", alignItems: "center", perspective: 900, maxWidth: "100%", overflow: "hidden" }}>
       <style>{`
         @keyframes pulse { 0%,100% { opacity:0.3; } 50% { opacity:0.8; } }
         @keyframes floatSpec { 0%,100% { transform:translateY(0); } 50% { transform:translateY(-10px); } }
         @keyframes gridPulse { 0%,100% { opacity:0.03; } 50% { opacity:0.07; } }
         @keyframes spin { to { transform: rotate(360deg); } }
+        .ss-frame-scale { transform: scale(1); }
+        @media (max-width: 480px) { .ss-frame-scale { transform: scale(0.72); } }
       `}</style>
-      <div style={{
+      <div className="ss-frame-scale" style={{
         position: "relative", width: 300, height: 320, transformStyle: "preserve-3d",
         transform: `rotateY(${mouseX}deg) rotateX(${mouseY}deg)`, transition: "transform 0.15s ease-out",
       }}>
@@ -198,6 +200,7 @@ function Step({ num, title, desc, delay }: { num: string; title: string; desc: s
 export default function LandingPage() {
   const navigate = useNavigate();
   const [navSolid, setNavSolid] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [uploadHover, setUploadHover] = useState(false);
   const [showProcess, setShowProcess] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -237,19 +240,21 @@ export default function LandingPage() {
     <div style={{ fontFamily: "Inter,-apple-system,BlinkMacSystemFont,sans-serif", background: C.charcoal, color: C.cream, minHeight: "100vh", overflowX: "hidden" }}>
       <ScrollProgress />
 
-      <nav style={{
+      <nav className="ss-nav" style={{
         position: "fixed", top: 0, left: 0, right: 0, zIndex: 100, padding: "0 40px", height: 60,
         display: "flex", justifyContent: "space-between", alignItems: "center",
-        background: navSolid ? "rgba(20,20,20,0.92)" : "transparent",
-        backdropFilter: navSolid ? "blur(20px)" : "none",
+        background: navSolid || mobileMenuOpen ? "rgba(20,20,20,0.96)" : "transparent",
+        backdropFilter: navSolid || mobileMenuOpen ? "blur(20px)" : "none",
         borderBottom: navSolid ? "1px solid rgba(196,99,58,0.12)" : "1px solid transparent",
         transition: "all 0.4s",
       }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div style={{ width: 28, height: 28, background: C.rust, borderRadius: 5, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 16, color: C.cream }}>S</div>
+          <div style={{ width: 28, height: 28, background: C.rust, borderRadius: 5, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 16, color: C.cream, flexShrink: 0 }}>S</div>
           <span style={{ fontWeight: 700, fontSize: 14, letterSpacing: 3, color: C.rust }}>STEELSPEC</span>
         </div>
-        <div style={{ display: "flex", gap: 28, alignItems: "center" }}>
+
+        {/* Desktop nav */}
+        <div className="ss-nav-links ss-nav-desktop" style={{ display: "flex" }}>
           {["upload", "features", "how"].map((id) => (
             <a key={id} onClick={() => smoothScroll(id)} style={{ color: C.steelLight, fontSize: 13, textDecoration: "none", cursor: "pointer", letterSpacing: 0.5 }}>
               {id.charAt(0).toUpperCase() + id.slice(1)}
@@ -259,13 +264,51 @@ export default function LandingPage() {
             Dashboard →
           </a>
         </div>
+
+        {/* Mobile hamburger */}
+        <button
+          className="ss-nav-mobile-btn"
+          onClick={() => setMobileMenuOpen((v) => !v)}
+          style={{ display: "none", background: "none", border: "none", color: C.cream, padding: 6, cursor: "pointer" }}
+          aria-label="Toggle menu"
+        >
+          {mobileMenuOpen ? <X size={22} /> : <Menu size={22} />}
+        </button>
       </nav>
 
-      <section style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", position: "relative", overflow: "hidden", padding: "120px 40px 80px" }}>
+      {/* Mobile menu panel */}
+      {mobileMenuOpen && (
+        <div style={{
+          position: "fixed", top: 60, left: 0, right: 0, zIndex: 99,
+          background: "rgba(20,20,20,0.98)", backdropFilter: "blur(20px)",
+          borderBottom: "1px solid rgba(196,99,58,0.12)",
+          display: "flex", flexDirection: "column", padding: "8px 20px 20px",
+        }}>
+          {["upload", "features", "how"].map((id) => (
+            <a key={id} onClick={() => { smoothScroll(id); setMobileMenuOpen(false); }}
+              style={{ color: C.steelLight, fontSize: 15, textDecoration: "none", cursor: "pointer", padding: "14px 4px", borderBottom: "1px solid rgba(122,122,122,0.1)" }}>
+              {id.charAt(0).toUpperCase() + id.slice(1)}
+            </a>
+          ))}
+          <a onClick={() => { setMobileMenuOpen(false); navigate("/dashboard"); }}
+            style={{ color: C.rust, fontSize: 15, fontWeight: 600, cursor: "pointer", padding: "14px 4px" }}>
+            Dashboard →
+          </a>
+        </div>
+      )}
+
+      <style>{`
+        @media (max-width: 700px) {
+          .ss-nav-desktop { display: none !important; }
+          .ss-nav-mobile-btn { display: flex !important; align-items: center; justify-content: center; }
+        }
+      `}</style>
+
+      <section className="ss-hero ss-section" style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", position: "relative", overflow: "hidden" }}>
         <div style={{ position: "absolute", inset: 0, opacity: 0.04, backgroundImage: "linear-gradient(rgba(196,99,58,0.5) 1px, transparent 1px), linear-gradient(90deg, rgba(196,99,58,0.5) 1px, transparent 1px)", backgroundSize: "60px 60px", animation: "gridPulse 8s ease-in-out infinite" }} />
         <div style={{ position: "absolute", top: "30%", right: "20%", width: 500, height: 500, borderRadius: "50%", background: "radial-gradient(circle, rgba(196,99,58,0.06) 0%, transparent 70%)", filter: "blur(60px)" }} />
 
-        <div style={{ maxWidth: 1200, width: "100%", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 60, alignItems: "center" }}>
+        <div className="ss-hero-content">
           <div>
             <Reveal>
               <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: 4, color: C.rust, textTransform: "uppercase", marginBottom: 16, display: "flex", alignItems: "center", gap: 8 }}>
@@ -274,17 +317,17 @@ export default function LandingPage() {
               </div>
             </Reveal>
             <Reveal delay={0.1}>
-              <h1 style={{ fontSize: "clamp(36px, 5vw, 58px)", fontWeight: 800, lineHeight: 1.04, letterSpacing: -2, margin: "0 0 22px" }}>
+              <h1 style={{ fontSize: "clamp(32px, 8vw, 58px)", fontWeight: 800, lineHeight: 1.04, letterSpacing: -2, margin: "0 0 22px" }}>
                 Steel takeoff,<br /><span style={{ color: C.rust }}>automated.</span>
               </h1>
             </Reveal>
             <Reveal delay={0.2}>
-              <p style={{ fontSize: 17, color: C.warmGrey, lineHeight: 1.65, maxWidth: 440, margin: "0 0 36px" }}>
+              <p style={{ fontSize: 17, color: C.warmGrey, lineHeight: 1.65, maxWidth: 440, margin: "0 auto 36px" }}>
                 Upload your engineer's IFC or DWG file. Get a complete steel schedule and connection report in minutes — not days.
               </p>
             </Reveal>
             <Reveal delay={0.3}>
-              <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
+              <div className="ss-cta-row">
                 <button onClick={() => smoothScroll("upload")} style={{
                   display: "inline-flex", alignItems: "center", gap: 8, padding: "15px 28px",
                   background: C.rust, color: C.cream, border: "none", borderRadius: 8, fontSize: 14,
@@ -302,7 +345,9 @@ export default function LandingPage() {
               </div>
             </Reveal>
           </div>
-          <Reveal delay={0.2} direction="scale"><SteelFrame /></Reveal>
+          <div className="ss-frame-wrap">
+            <Reveal delay={0.2} direction="scale"><SteelFrame /></Reveal>
+          </div>
         </div>
 
         <div style={{ position: "absolute", bottom: 32, left: "50%", transform: "translateX(-50%)", display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
@@ -311,7 +356,7 @@ export default function LandingPage() {
         </div>
       </section>
 
-      <section id="upload" style={{ padding: "100px 40px", background: C.dark, borderTop: "1px solid rgba(196,99,58,0.12)", borderBottom: "1px solid rgba(196,99,58,0.12)" }}>
+      <section id="upload" className="ss-section" style={{ padding: "100px 40px", background: C.dark, borderTop: "1px solid rgba(196,99,58,0.12)", borderBottom: "1px solid rgba(196,99,58,0.12)" }}>
         <div style={{ maxWidth: 680, margin: "0 auto", textAlign: "center" }}>
           <Reveal><div style={{ fontSize: 11, fontWeight: 600, letterSpacing: 3, color: C.rust, textTransform: "uppercase", marginBottom: 12 }}>Upload</div></Reveal>
           <Reveal delay={0.1}><h2 style={{ fontSize: 30, fontWeight: 700, letterSpacing: -0.5, marginBottom: 12 }}>Drop your structural file</h2></Reveal>
@@ -346,7 +391,7 @@ export default function LandingPage() {
         </div>
       </section>
 
-      <section style={{ background: C.dark2, borderBottom: "1px solid rgba(196,99,58,0.12)", padding: "52px 40px" }}>
+      <section className="ss-section" style={{ background: C.dark2, borderBottom: "1px solid rgba(196,99,58,0.12)", padding: "52px 40px" }}>
         <div style={{ maxWidth: 900, margin: "0 auto", display: "flex", justifyContent: "space-around", textAlign: "center", flexWrap: "wrap", gap: 32 }}>
           {[{ val: 218, suffix: "", label: "Steel sections" }, { val: 29, suffix: "", label: "Fab drawings" }, { val: 100, suffix: "%", label: "NZ/AU standards" }].map((s, i) => (
             <Reveal key={i} delay={i * 0.1}>
@@ -360,14 +405,14 @@ export default function LandingPage() {
         </div>
       </section>
 
-      <section id="features" style={{ padding: "100px 40px", background: C.charcoal }}>
+      <section id="features" className="ss-section" style={{ padding: "100px 40px", background: C.charcoal }}>
         <div style={{ maxWidth: 1000, margin: "0 auto" }}>
           <div style={{ textAlign: "center", marginBottom: 56 }}>
             <Reveal><div style={{ fontSize: 11, fontWeight: 600, letterSpacing: 3, color: C.rust, textTransform: "uppercase", marginBottom: 12 }}>Features</div></Reveal>
             <Reveal delay={0.1}><h2 style={{ fontSize: 30, fontWeight: 700, letterSpacing: -0.5, marginBottom: 12 }}>Built for fabricators</h2></Reveal>
             <Reveal delay={0.15}><p style={{ fontSize: 15, color: C.warmGrey, maxWidth: 460, margin: "0 auto" }}>Every feature designed around how NZ steel fabricators and estimators actually work.</p></Reveal>
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 20 }}>
+          <div className="ss-features-grid">
             <FeatureCard icon={Zap} title="Automatic extraction" desc="Steel members, sections, lengths, and weights pulled directly from your engineer's model. No manual data entry." delay={0.05} />
             <FeatureCard icon={Layers} title="Connection reporting" desc="Bolt sizes, grades, plate thicknesses, and weld details extracted and presented alongside the members they connect." delay={0.1} />
             <FeatureCard icon={BarChart3} title="NZ steel database" desc="218 sections across UB, UC, PFC, EA, RHS, SHS, CHS families. All matched to AS/NZS standards." delay={0.15} />
@@ -378,12 +423,12 @@ export default function LandingPage() {
         </div>
       </section>
 
-      <section id="how" style={{ padding: "100px 40px", background: C.dark, borderTop: "1px solid rgba(196,99,58,0.12)" }}>
+      <section id="how" className="ss-section" style={{ padding: "100px 40px", background: C.dark, borderTop: "1px solid rgba(196,99,58,0.12)" }}>
         <div style={{ textAlign: "center", marginBottom: 56 }}>
           <Reveal><div style={{ fontSize: 11, fontWeight: 600, letterSpacing: 3, color: C.rust, textTransform: "uppercase", marginBottom: 12 }}>Process</div></Reveal>
           <Reveal delay={0.1}><h2 style={{ fontSize: 30, fontWeight: 700, letterSpacing: -0.5 }}>Three steps to your steel schedule</h2></Reveal>
         </div>
-        <div style={{ maxWidth: 800, margin: "0 auto", display: "flex", position: "relative" }}>
+        <div className="ss-steps">
           <div style={{ position: "absolute", top: 26, left: 80, right: 80, height: 1, background: `linear-gradient(90deg, ${C.rust}, ${C.steelDark}, ${C.rust})`, opacity: 0.25 }} />
           <Step num="1" title="Upload" desc="Drop your IFC or DWG/DXF file from the structural engineer" delay={0.1} />
           <Step num="2" title="Extract" desc="We parse every steel member, section, and connection detail automatically" delay={0.2} />
@@ -391,13 +436,13 @@ export default function LandingPage() {
         </div>
       </section>
 
-      <section style={{ padding: "100px 40px", background: C.charcoal, borderTop: "1px solid rgba(196,99,58,0.12)" }}>
+      <section className="ss-section" style={{ padding: "100px 40px", background: C.charcoal, borderTop: "1px solid rgba(196,99,58,0.12)" }}>
         <div style={{ maxWidth: 900, margin: "0 auto", textAlign: "center" }}>
           <Reveal><div style={{ fontSize: 11, fontWeight: 600, letterSpacing: 3, color: C.rust, textTransform: "uppercase", marginBottom: 12 }}>Output</div></Reveal>
           <Reveal delay={0.1}><h2 style={{ fontSize: 30, fontWeight: 700, letterSpacing: -0.5, marginBottom: 12 }}>What you get</h2></Reveal>
           <Reveal delay={0.15}><p style={{ fontSize: 15, color: C.warmGrey, maxWidth: 500, margin: "0 auto 40px" }}>A complete steel package — schedule, connections, and fabrication drawings.</p></Reveal>
           <Reveal delay={0.2}>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16 }}>
+            <div className="ss-output-grid">
               {[
                 { title: "Steel Schedule", items: ["Member marks & sections", "Lengths & quantities", "Weight per member", "Total tonnage"] },
                 { title: "Connection Report", items: ["Bolt sizes & grades", "Plate dimensions", "Weld specifications", "Grid references"] },
@@ -417,7 +462,7 @@ export default function LandingPage() {
         </div>
       </section>
 
-      <section style={{ padding: "80px 40px", textAlign: "center", background: C.dark, borderTop: "1px solid rgba(196,99,58,0.12)" }}>
+      <section className="ss-section" style={{ padding: "80px 40px", textAlign: "center", background: C.dark, borderTop: "1px solid rgba(196,99,58,0.12)" }}>
         <Reveal><div style={{ fontSize: 11, fontWeight: 600, letterSpacing: 3, color: C.rust, textTransform: "uppercase", marginBottom: 12 }}>Ready?</div></Reveal>
         <Reveal delay={0.1}><h2 style={{ fontSize: 30, fontWeight: 700, marginBottom: 28, letterSpacing: -0.5 }}>Stop counting steel by hand</h2></Reveal>
         <Reveal delay={0.2}>

@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import {
   Home, Folder, Upload, FileText, CreditCard, Settings,
-  BarChart3, Clock, Download, Lock, Check, X,
+  BarChart3, Clock, Download, Lock, Check, X, Menu,
 } from "lucide-react";
 import { theme as C } from "../lib/theme";
 
@@ -69,7 +69,7 @@ function ProjectsTable({ rows, onOpen, compact }: { rows: Project[]; onOpen: (p:
   const th: React.CSSProperties = { textAlign: "left", padding: "10px 20px", fontSize: 10.5, fontWeight: 600, letterSpacing: 1, textTransform: "uppercase", color: C.greyLight, borderBottom: `1px solid ${C.borderLight}`, whiteSpace: "nowrap" };
   const td: React.CSSProperties = { padding: "13px 20px", borderBottom: `1px solid ${C.borderLight}`, verticalAlign: "middle" };
   return (
-    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+    <div style={{ overflowX: "auto" }}><table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
       <thead><tr>
         <th style={th}>Project</th><th style={th}>Client</th>{!compact && <th style={th}>Format</th>}
         <th style={th}>Members</th><th style={th}>Tonnage</th><th style={th}>Status</th><th style={{ ...th, textAlign: "right" }}>Date</th>
@@ -89,7 +89,7 @@ function ProjectsTable({ rows, onOpen, compact }: { rows: Project[]; onOpen: (p:
           </tr>
         ))}
       </tbody>
-    </table>
+    </table></div>
   );
 }
 
@@ -119,6 +119,7 @@ function UploadZone({ big, onClick }: { big?: boolean; onClick: () => void }) {
 // === MAIN DASHBOARD ===
 export default function Dashboard() {
   const [view, setView] = useState<View>("dashboard");
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [modal, setModal] = useState<Project | null>(null);
   const [proc, setProc] = useState(false);
   const [prog, setProg] = useState(0);
@@ -176,9 +177,29 @@ export default function Dashboard() {
 
   return (
     <div style={{ fontFamily: "Inter,-apple-system,sans-serif", background: C.bg, color: C.ink, fontSize: 14, minHeight: "100vh" }}>
-      <div style={{ display: "flex", minHeight: "100vh" }}>
+      {/* Mobile top bar */}
+      <div className="ss-dash-mobile-toggle" style={{
+        position: "fixed", top: 0, left: 0, right: 0, height: 56, zIndex: 60,
+        background: C.card, borderBottom: `1px solid ${C.border}`,
+        alignItems: "center", justifyContent: "space-between", padding: "0 16px",
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
+          <div style={{ width: 26, height: 26, background: C.rust, borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 14, color: "#f5ede4" }}>S</div>
+          <span style={{ fontWeight: 700, fontSize: 12, letterSpacing: 2 }}>STEELSPEC</span>
+        </div>
+        <button onClick={() => setSidebarOpen((v) => !v)} style={{ background: "none", border: "none", padding: 6, cursor: "pointer", color: C.ink }}>
+          {sidebarOpen ? <X size={22} /> : <Menu size={22} />}
+        </button>
+      </div>
+
+      {/* Backdrop for mobile sidebar */}
+      {sidebarOpen && (
+        <div onClick={() => setSidebarOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.3)", zIndex: 55 }} className="ss-dash-mobile-toggle" />
+      )}
+
+      <div className="ss-dash-layout">
         {/* SIDEBAR */}
-        <aside style={{ width: 230, background: C.card, borderRight: `1px solid ${C.border}`, display: "flex", flexDirection: "column", position: "fixed", top: 0, bottom: 0, left: 0, zIndex: 50 }}>
+        <aside className={"ss-dash-sidebar" + (sidebarOpen ? " open" : "")} style={{ background: C.card, borderRight: `1px solid ${C.border}`, display: "flex", flexDirection: "column" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "20px 20px 24px" }}>
             <div style={{ width: 30, height: 30, background: C.rust, borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 17, color: "#f5ede4" }}>S</div>
             <span style={{ fontWeight: 700, fontSize: 13, letterSpacing: 2.5 }}>STEELSPEC</span>
@@ -186,11 +207,11 @@ export default function Dashboard() {
           <div style={{ padding: "0 12px", flex: 1 }}>
             <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: 1.5, textTransform: "uppercase", color: C.greyLight, padding: "14px 12px 6px" }}>Workspace</div>
             {navItems.map(([k, l, ic]) => (
-              <button key={k} style={navItemStyle(view === k)} onClick={() => setView(k)}>{ic}{l}</button>
+              <button key={k} style={navItemStyle(view === k)} onClick={() => { setView(k); setSidebarOpen(false); }}>{ic}{l}</button>
             ))}
             <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: 1.5, textTransform: "uppercase", color: C.greyLight, padding: "14px 12px 6px" }}>Account</div>
             {navItems2.map(([k, l, ic]) => (
-              <button key={k} style={navItemStyle(view === k)} onClick={() => setView(k)}>{ic}{l}</button>
+              <button key={k} style={navItemStyle(view === k)} onClick={() => { setView(k); setSidebarOpen(false); }}>{ic}{l}</button>
             ))}
           </div>
           <div style={{ padding: 16, borderTop: `1px solid ${C.borderLight}` }}>
@@ -205,7 +226,12 @@ export default function Dashboard() {
         </aside>
 
         {/* MAIN */}
-        <main style={{ flex: 1, marginLeft: 230, padding: "0 32px 48px" }}>
+        <main className="ss-dash-main">
+          <style>{`
+            @media (max-width: 860px) {
+              .ss-dash-main { padding-top: 72px !important; }
+            }
+          `}</style>
           {view === "dashboard" && (
             <>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "20px 0 24px", gap: 16, flexWrap: "wrap" }}>
@@ -213,14 +239,14 @@ export default function Dashboard() {
                 <button style={btnRust} onClick={() => setView("upload")}><Upload size={15} /> New Takeoff</button>
               </div>
 
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 16, marginBottom: 24 }}>
+              <div className="ss-dash-stats" style={{ marginBottom: 24 }}>
                 <StatCard icon={<Folder size={17} />} label="Active projects" val="5" sub={<><b style={{ color: C.green }}>+2</b> this week</>} />
                 <StatCard icon={<BarChart3 size={17} />} label="Tonnage this month" val="16.6t" sub="across 4 completed jobs" />
                 <StatCard icon={<FileText size={17} />} label="Reports generated" val="23" sub="schedules + connections" />
                 <StatCard icon={<Clock size={17} />} label="Est. hours saved" val="61h" sub={<>vs manual takeoff · <b style={{ color: C.green }}>$7,930</b></>} />
               </div>
 
-              <div style={{ display: "grid", gridTemplateColumns: "1.7fr 1fr", gap: 16 }}>
+              <div className="ss-dash-grid2">
                 <div style={panel}>
                   <div style={panelHead}><h3 style={{ fontSize: 14, fontWeight: 600 }}>Recent projects</h3><button style={{ fontSize: 12, color: C.rust, fontWeight: 600, background: "none", border: "none", cursor: "pointer" }} onClick={() => setView("projects")}>View all →</button></div>
                   <ProjectsTable rows={PROJECTS.slice(0, 4)} onOpen={setModal} compact />
@@ -258,7 +284,7 @@ export default function Dashboard() {
               <div style={{ padding: "20px 0 24px" }}><h1 style={{ fontSize: 21, fontWeight: 700 }}>New Takeoff</h1><p style={{ fontSize: 13, color: C.grey, marginTop: 2 }}>Upload the engineer's model file to start extraction.</p></div>
               <div style={{ ...panel, padding: 24 }}>
                 <UploadZone big onClick={() => setProc(true)} />
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginTop: 20 }}>
+                <div className="ss-upload-info-grid" style={{ marginTop: 20 }}>
                   {[["IFC / BIM", "Highest accuracy — direct from Revit, Tekla, or ArchiCAD."], ["DWG / DXF", "CAD drawings — extraction with a quick review step."], ["What you get", "Steel schedule, connection report, and total tonnage as PDF."]].map(([t, d], i) => (
                     <div key={i} style={{ padding: "14px 16px", background: C.bg, borderRadius: 10, border: `1px solid ${C.borderLight}` }}>
                       <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4, color: C.rust }}>{t}</div>
@@ -274,7 +300,7 @@ export default function Dashboard() {
             <>
               <div style={{ padding: "20px 0 24px" }}><h1 style={{ fontSize: 21, fontWeight: 700 }}>Reports</h1><p style={{ fontSize: 13, color: C.grey, marginTop: 2 }}>Download previously generated documents.</p></div>
               <div style={panel}>
-                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                <div style={{ overflowX: "auto" }}><table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
                   <thead><tr>
                     {["Document", "Project", "Type", "Generated", ""].map((h, i) => (
                       <th key={i} style={{ textAlign: i === 3 ? "right" : "left", padding: "10px 20px", fontSize: 10.5, fontWeight: 600, letterSpacing: 1, textTransform: "uppercase", color: C.greyLight, borderBottom: `1px solid ${C.borderLight}` }}>{h}</th>
@@ -293,7 +319,7 @@ export default function Dashboard() {
                       </tr>
                     ))}
                   </tbody>
-                </table>
+                </table></div>
               </div>
             </>
           )}
@@ -304,7 +330,7 @@ export default function Dashboard() {
 
               <div style={{ ...panel, padding: "24px 24px 28px", marginBottom: 16 }}>
                 <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 16 }}>Plan</h3>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, maxWidth: 680 }}>
+                <div className="ss-dash-plans">
                   <div style={{ border: `1.5px solid ${C.rust}`, background: C.rustBg, borderRadius: 12, padding: "22px 20px", position: "relative" }}>
                     <span style={{ position: "absolute", top: -9, left: 18, background: C.rust, color: "#fff", fontSize: 10, fontWeight: 700, letterSpacing: 0.5, padding: "2px 10px", borderRadius: 20 }}>CURRENT</span>
                     <div style={{ fontSize: 13, fontWeight: 600, color: C.grey, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>Pay as you go</div>
@@ -352,7 +378,7 @@ export default function Dashboard() {
 
               <div style={panel}>
                 <div style={panelHead}><h3 style={{ fontSize: 14, fontWeight: 600 }}>Invoice history</h3></div>
-                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                <div style={{ overflowX: "auto" }}><table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
                   <thead><tr>
                     {["Invoice", "Project", "Method", "Amount", "Status", "Date"].map((h, i) => (
                       <th key={i} style={{ textAlign: i === 3 || i === 5 ? "right" : "left", padding: "10px 20px", fontSize: 10.5, fontWeight: 600, letterSpacing: 1, textTransform: "uppercase", color: C.greyLight, borderBottom: `1px solid ${C.borderLight}` }}>{h}</th>
@@ -372,7 +398,7 @@ export default function Dashboard() {
                       </tr>
                     ))}
                   </tbody>
-                </table>
+                </table></div>
               </div>
             </>
           )}
@@ -398,7 +424,7 @@ export default function Dashboard() {
                 <button onClick={() => setModal(null)} style={{ background: "none", border: "none", fontSize: 20, color: C.grey, padding: 4, cursor: "pointer" }}><X size={20} /></button>
               </div>
               <div style={{ padding: "20px 24px 24px" }}>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, margin: "16px 0" }}>
+                <div className="ss-kv-grid" style={{ margin: "16px 0" }}>
                   {[["Status", <Badge status={modal.status} />], ["Source format", `.${modal.format}`], ["Steel members", modal.members || "—"], ["Total tonnage", modal.tonnage ? `${modal.tonnage.toFixed(2)} t` : "—"]].map(([l, v], i) => (
                     <div key={i} style={{ padding: "10px 14px", background: C.bg, borderRadius: 8, border: `1px solid ${C.borderLight}` }}>
                       <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: 0.8, color: C.grey }}>{l}</div>
