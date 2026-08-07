@@ -617,7 +617,7 @@ export default function LandingPage() {
               </h1>
             </Reveal>
             <Reveal delay={0.2}>
-              <p style={{ fontSize: 17, color: C.grey, lineHeight: 1.65, maxWidth: 440, margin: "0 auto 36px" }}>
+              <p className="ss-hero-desc" style={{ fontSize: 17, color: C.grey, lineHeight: 1.65, maxWidth: 440 }}>
                 Upload your engineer's IFC or DWG file. Get a complete steel schedule and connection report in minutes — not days. Price the job same-day instead of losing an evening to a manual count.
               </p>
             </Reveal>
