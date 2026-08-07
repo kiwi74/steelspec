@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { ChevronDown, ArrowLeft } from "lucide-react";
 import { theme as C } from "../lib/theme";
+import Footer from "../components/Footer";
 
 const FAQS: { category: string; items: { q: string; a: string }[] }[] = [
   {
@@ -158,6 +159,8 @@ export default function FAQPage() {
           </button>
         </div>
       </section>
+
+      <Footer />
     </div>
   );
 }

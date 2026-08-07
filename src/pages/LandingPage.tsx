@@ -3,9 +3,11 @@ import type { ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   ArrowRight, Layers, FileText, Shield, RefreshCw,
-  BarChart3, Zap, ChevronDown, Check, Menu, X, Mail,
+  BarChart3, Zap, ChevronDown, Check, Menu, X,
 } from "lucide-react";
 import { theme as C } from "../lib/theme";
+import { FloatingInput } from "../components/FloatingInput";
+import Footer from "../components/Footer";
 
 // === HOOKS ===
 function useInView(options = {}) {
@@ -306,76 +308,6 @@ function FabDrawingMock() {
   );
 }
 
-// Custom social icons (lucide-react no longer ships brand/logo icons)
-function LinkedInIcon({ size = 15 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor">
-      <path d="M20.45 20.45h-3.55v-5.57c0-1.33-.02-3.03-1.85-3.03-1.85 0-2.14 1.45-2.14 2.94v5.66H9.36V9h3.41v1.56h.05c.47-.9 1.63-1.85 3.36-1.85 3.6 0 4.27 2.37 4.27 5.45v6.29zM5.34 7.43a2.06 2.06 0 1 1 0-4.12 2.06 2.06 0 0 1 0 4.12zM7.12 20.45H3.56V9h3.56v11.45z"/>
-    </svg>
-  );
-}
-function InstagramIcon({ size = 15 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-      <rect x="3" y="3" width="18" height="18" rx="5" />
-      <circle cx="12" cy="12" r="4" />
-      <circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none" />
-    </svg>
-  );
-}
-function FacebookIcon({ size = 15 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor">
-      <path d="M14 13.5h2.5l1-4H14V7.5c0-1.03 0-2 2-2h1.5V2.14c-.35-.05-1.5-.14-2.72-.14C11.3 2 9.5 3.66 9.5 6.7V9.5H6.5v4h3V22h4.5v-8.5z"/>
-    </svg>
-  );
-}
-
-// === FLOATING LABEL INPUT ===
-function FloatingInput({
-  label, type = "text", value, onChange, name, error,
-}: { label: string; type?: string; value: string; onChange: (v: string) => void; name: string; error?: string }) {
-  const [focused, setFocused] = useState(false);
-  const active = focused || value.length > 0;
-  return (
-    <div style={{ marginTop: 10 }}>
-      <div style={{ position: "relative" }}>
-        <input
-          id={`ss-auth-${name}`}
-          type={type}
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          onFocus={() => setFocused(true)}
-          onBlur={() => setFocused(false)}
-          style={{
-            width: "100%", padding: "13px 14px", background: "#fff",
-            border: `1.5px solid ${error ? "#c44" : active ? C.rust : C.border}`,
-            borderRadius: 8, color: C.ink, fontSize: 14, fontFamily: "inherit",
-            outline: "none", transition: "border-color 0.2s", boxSizing: "border-box",
-          }}
-        />
-        <label
-          htmlFor={`ss-auth-${name}`}
-          style={{
-            position: "absolute", left: 11, pointerEvents: "none",
-            top: active ? -8 : "50%", transform: active ? "none" : "translateY(-50%)",
-            fontSize: active ? 11 : 14, padding: active ? "0 5px" : 0,
-            background: active ? "#fff" : "transparent",
-            color: error ? "#c44" : active ? C.rust : C.grey,
-            transition: "all 0.15s ease-out", fontWeight: active ? 600 : 400,
-            letterSpacing: active ? 0.3 : 0,
-          }}
-        >
-          {label}
-        </label>
-      </div>
-      {error && (
-        <div style={{ fontSize: 11.5, color: "#c44", marginTop: 5, paddingLeft: 2 }}>{error}</div>
-      )}
-    </div>
-  );
-}
-
 // === AUTH POPOVER (sign in / sign up) ===
 function AuthPopover({ onClose, align = "right", defaultMode = "signup" }: { onClose: () => void; align?: "left" | "right" | "center"; defaultMode?: "signup" | "signin" }) {
   const [mode, setMode] = useState<"signup" | "signin">(defaultMode);
@@ -506,6 +438,15 @@ export default function LandingPage() {
     setAuthMode(mode);
     setAuthOpen((v) => (authMode === mode ? !v : true));
   };
+
+  useEffect(() => {
+    if (window.location.hash) {
+      const id = window.location.hash.replace("#", "");
+      setTimeout(() => {
+        document.getElementById(id)?.scrollIntoView({ behavior: "smooth" });
+      }, 100);
+    }
+  }, []);
 
   useEffect(() => {
     const handler = () => setNavSolid(window.scrollY > 20);
@@ -785,83 +726,7 @@ export default function LandingPage() {
       </section>
 
       {/* FOOTER */}
-      <Footer onScrollTo={smoothScroll} />
+      <Footer />
     </div>
-  );
-}
-
-// === FOOTER (dark, GoodFi-style) ===
-function Footer({ onScrollTo }: { onScrollTo: (id: string) => void }) {
-  const navigate = useNavigate();
-
-  const linkCol = (title: string, links: { label: string; to?: string; scrollTo?: string }[]) => (
-    <div>
-      <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", color: "rgba(245,237,228,0.4)", marginBottom: 16 }}>{title}</div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 11 }}>
-        {links.map((l) => (
-          <a key={l.label}
-            onClick={() => { if (l.to) navigate(l.to); else if (l.scrollTo) onScrollTo(l.scrollTo); }}
-            style={{ fontSize: 13.5, color: "rgba(245,237,228,0.75)", textDecoration: "none", cursor: (l.to || l.scrollTo) ? "pointer" : "default" }}
-            onMouseEnter={(e) => (e.currentTarget.style.color = "#e8854a")}
-            onMouseLeave={(e) => (e.currentTarget.style.color = "rgba(245,237,228,0.75)")}>
-            {l.label}
-          </a>
-        ))}
-      </div>
-    </div>
-  );
-
-  return (
-    <footer style={{ background: "#141414", color: "#f5ede4", padding: "72px 40px 0" }}>
-      <div style={{ maxWidth: 1100, margin: "0 auto" }}>
-        <div className="ss-footer-grid">
-          <div style={{ maxWidth: 280 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
-              <div style={{ width: 28, height: 28, background: "#c4633a", borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 16, color: "#f5ede4" }}>S</div>
-              <span style={{ fontWeight: 700, fontSize: 14, letterSpacing: 3, color: "#c4633a" }}>STEELSPEC</span>
-            </div>
-            <p style={{ fontSize: 13, color: "rgba(245,237,228,0.6)", lineHeight: 1.7, marginBottom: 20 }}>
-              Structural steel takeoff, automated. Upload your engineer's model, get a fabrication-ready steel schedule in minutes.
-            </p>
-            <div style={{ display: "flex", gap: 10 }}>
-              {[LinkedInIcon, InstagramIcon, FacebookIcon, Mail].map((Icon, i) => (
-                <a key={i} style={{
-                  width: 34, height: 34, borderRadius: 8, background: "rgba(245,237,228,0.06)",
-                  border: "1px solid rgba(245,237,228,0.12)", display: "flex", alignItems: "center",
-                  justifyContent: "center", color: "rgba(245,237,228,0.7)", cursor: "pointer", transition: "all 0.2s",
-                }}
-                  onMouseEnter={(e) => { e.currentTarget.style.background = "#c4633a"; e.currentTarget.style.color = "#fff"; e.currentTarget.style.borderColor = "#c4633a"; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(245,237,228,0.06)"; e.currentTarget.style.color = "rgba(245,237,228,0.7)"; e.currentTarget.style.borderColor = "rgba(245,237,228,0.12)"; }}>
-                  <Icon size={15} />
-                </a>
-              ))}
-            </div>
-          </div>
-
-          {linkCol("Product", [
-            { label: "Sample Output", scrollTo: "output" },
-            { label: "Features", scrollTo: "features" },
-            { label: "How it works", scrollTo: "how" },
-            { label: "FAQ", to: "/faq" },
-          ])}
-          {linkCol("Company", [
-            { label: "About" },
-            { label: "Contact" },
-            { label: "Support" },
-          ])}
-          {linkCol("Legal", [
-            { label: "Privacy Policy" },
-            { label: "Terms of Service" },
-          ])}
-        </div>
-
-        <div style={{ borderTop: "1px solid rgba(245,237,228,0.1)", marginTop: 56, padding: "24px 0", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
-          <span style={{ fontSize: 12.5, color: "rgba(245,237,228,0.45)" }}>© {new Date().getFullYear()} SteelSpec. All rights reserved.</span>
-          <span style={{ fontSize: 12.5, color: "rgba(245,237,228,0.45)", display: "flex", alignItems: "center", gap: 6 }}>
-            Made in Aotearoa <span style={{ fontSize: 14 }}>🇳🇿</span>
-          </span>
-        </div>
-      </div>
-    </footer>
   );
 }
