@@ -21,6 +21,7 @@ interface Project {
   total_members: number;
   total_weight_tonnes: number;
   source_format: string | null;
+  error_message: string | null;
   created_at: string;
 }
 
@@ -189,7 +190,7 @@ export default function Dashboard() {
     setLoadingProjects(true);
     const { data, error } = await supabase
       .from("projects")
-      .select("id, name, engineer_reference, client, status, total_members, total_weight_tonnes, source_format, created_at")
+      .select("id, name, engineer_reference, client, status, total_members, total_weight_tonnes, source_format, error_message, created_at")
       .order("created_at", { ascending: false });
     if (!error && data) setProjects(data as Project[]);
     setLoadingProjects(false);
@@ -209,6 +210,29 @@ export default function Dashboard() {
     fetchProjects();
     fetchInvoices();
   }, [fetchProjects, fetchInvoices]);
+
+  // Poll for updates while the modal is open on a project that's still
+  // "processing" — extraction happens asynchronously on a separate
+  // service, so the modal has no way of knowing it finished unless we
+  // actively check back. Stops as soon as the status changes.
+  useEffect(() => {
+    if (!modal || modal.status !== "processing") return;
+
+    const interval = setInterval(async () => {
+      const { data, error } = await supabase
+        .from("projects")
+        .select("id, name, engineer_reference, client, status, total_members, total_weight_tonnes, source_format, error_message, created_at")
+        .eq("id", modal.id)
+        .single();
+
+      if (!error && data) {
+        setModal(data as Project);
+        setProjects((prev) => prev.map((p) => (p.id === data.id ? (data as Project) : p)));
+      }
+    }, 3000);
+
+    return () => clearInterval(interval);
+  }, [modal]);
 
   // === UPLOAD FLOW: real file → Supabase Storage + a real project row ===
   const handleFileSelected = async (file: File) => {
@@ -577,16 +601,19 @@ export default function Dashboard() {
                     </div>
                   ))}
                 </div>
-                {modal.status === "done" ? (
+                {modal.status === "done" || modal.status === "review" ? (
                   <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
                     <button style={btnRust} onClick={() => { setModal(null); startPayment({ name: modal.name || "Untitled project", ref: modal.engineer_reference || "" }); }}><Lock size={13} /> Unlock PDF — $199</button>
                     <button style={btnGhost}>View extraction</button>
                   </div>
+                ) : modal.status === "processing" ? (
+                  <div style={{ textAlign: "center", color: C.grey, fontSize: 13, padding: "20px 0", display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
+                    <div style={{ width: 22, height: 22, borderRadius: "50%", border: `2.5px solid ${C.border}`, borderTopColor: C.rust, animation: "spin 1s linear infinite" }} />
+                    Extraction in progress — this updates automatically, no need to refresh.
+                  </div>
                 ) : (
-                  <div style={{ textAlign: "center", color: C.grey, fontSize: 13, padding: "20px 0" }}>
-                    {modal.status === "processing"
-                      ? "Your file has been uploaded and is waiting on the extraction engine. This part of SteelSpec is still being connected."
-                      : "This project needs review before a report can be generated."}
+                  <div style={{ textAlign: "center", color: "#c44", fontSize: 13, padding: "20px 0" }}>
+                    Extraction failed{modal.error_message ? `: ${modal.error_message}` : ". Please try uploading again."}
                   </div>
                 )}
               </div>
