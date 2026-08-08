@@ -22,6 +22,7 @@ interface Project {
   total_weight_tonnes: number;
   source_format: string | null;
   error_message: string | null;
+  report_pdf_path: string | null;
   created_at: string;
 }
 
@@ -32,7 +33,7 @@ interface Invoice {
   status: string;
   payment_method: string | null;
   created_at: string;
-  projects: { name: string | null } | null;
+  projects: { name: string | null; report_pdf_path: string | null } | null;
 }
 
 const BADGE: Record<ProjectStatus, [string, string, string]> = {
@@ -181,7 +182,7 @@ export default function Dashboard() {
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
-  const [payModal, setPayModal] = useState<{ name: string; ref: string } | null>(null);
+  const [payModal, setPayModal] = useState<{ id: string; name: string; ref: string; reportPath: string | null } | null>(null);
   const [payProcessing, setPayProcessing] = useState(false);
   const [paySuccess, setPaySuccess] = useState(false);
 
@@ -190,7 +191,7 @@ export default function Dashboard() {
     setLoadingProjects(true);
     const { data, error } = await supabase
       .from("projects")
-      .select("id, name, engineer_reference, client, status, total_members, total_weight_tonnes, source_format, error_message, created_at")
+      .select("id, name, engineer_reference, client, status, total_members, total_weight_tonnes, source_format, error_message, report_pdf_path, created_at")
       .order("created_at", { ascending: false });
     if (!error && data) setProjects(data as Project[]);
     setLoadingProjects(false);
@@ -200,7 +201,7 @@ export default function Dashboard() {
     setLoadingInvoices(true);
     const { data, error } = await supabase
       .from("invoices")
-      .select("id, project_id, total_cents, status, payment_method, created_at, projects(name)")
+      .select("id, project_id, total_cents, status, payment_method, created_at, projects(name, report_pdf_path)")
       .order("created_at", { ascending: false });
     if (!error && data) setInvoices(data as unknown as Invoice[]);
     setLoadingInvoices(false);
@@ -221,7 +222,7 @@ export default function Dashboard() {
     const interval = setInterval(async () => {
       const { data, error } = await supabase
         .from("projects")
-        .select("id, name, engineer_reference, client, status, total_members, total_weight_tonnes, source_format, error_message, created_at")
+        .select("id, name, engineer_reference, client, status, total_members, total_weight_tonnes, source_format, error_message, report_pdf_path, created_at")
         .eq("id", modal.id)
         .single();
 
@@ -300,7 +301,26 @@ export default function Dashboard() {
     setModal({ ...project, uploaded_file_path: storagePath } as Project);
   };
 
-  const startPayment = (p: { name: string; ref: string }) => { setPayModal(p); setPaySuccess(false); };
+  const startPayment = (p: { id: string; name: string; ref: string; reportPath: string | null }) => { setPayModal(p); setPaySuccess(false); };
+
+  const downloadReport = async (reportPath: string | null, projectName: string) => {
+    if (!reportPath) {
+      alert("The report isn't ready yet — extraction may still be finishing. Try again in a moment.");
+      return;
+    }
+    const { data, error } = await supabase.storage.from("reports").createSignedUrl(reportPath, 60);
+    if (error || !data) {
+      alert(`Couldn't retrieve the report: ${error?.message ?? "unknown error"}`);
+      return;
+    }
+    // Open the signed URL — browsers will download or preview the PDF directly
+    const link = document.createElement("a");
+    link.href = data.signedUrl;
+    link.download = `${projectName || "steel-schedule"}.pdf`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
   const confirmPayment = () => { setPayProcessing(true); setTimeout(() => { setPayProcessing(false); setPaySuccess(true); }, 1400); };
 
   const handleSignOut = async () => {
@@ -474,7 +494,7 @@ export default function Dashboard() {
                           <td style={{ padding: "13px 20px", borderBottom: `1px solid ${C.borderLight}`, color: C.grey }}>{inv.payment_method || "—"}</td>
                           <td style={{ padding: "13px 20px", borderBottom: `1px solid ${C.borderLight}`, color: C.grey, fontSize: 12 }}>{fmtDate(inv.created_at)}</td>
                           <td style={{ padding: "13px 20px", borderBottom: `1px solid ${C.borderLight}`, textAlign: "right" }}>
-                            <button style={{ ...btnGhost, padding: "6px 12px", fontSize: 12 }} onClick={() => alert("In the live app, this downloads the steel schedule + connection PDF.")}><Download size={14} /> PDF</button>
+                            <button style={{ ...btnGhost, padding: "6px 12px", fontSize: 12 }} onClick={() => downloadReport(inv.projects?.report_pdf_path ?? null, inv.projects?.name ?? "steel-schedule")}><Download size={14} /> PDF</button>
                           </td>
                         </tr>
                       ))}
@@ -603,7 +623,7 @@ export default function Dashboard() {
                 </div>
                 {modal.status === "done" || modal.status === "review" ? (
                   <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                    <button style={btnRust} onClick={() => { setModal(null); startPayment({ name: modal.name || "Untitled project", ref: modal.engineer_reference || "" }); }}><Lock size={13} /> Unlock PDF — $199</button>
+                    <button style={btnRust} onClick={() => { setModal(null); startPayment({ id: modal.id, name: modal.name || "Untitled project", ref: modal.engineer_reference || "", reportPath: modal.report_pdf_path }); }}><Lock size={13} /> Unlock PDF — $199</button>
                     <button style={btnGhost}>View extraction</button>
                   </div>
                 ) : modal.status === "processing" ? (
@@ -691,7 +711,7 @@ export default function Dashboard() {
                   <div style={{ width: 52, height: 52, borderRadius: "50%", background: C.greenBg, color: C.green, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 16px" }}><Check size={24} /></div>
                   <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 6 }}>Payment successful</h2>
                   <div style={{ fontSize: 13, color: C.grey, marginBottom: 24 }}>Your report for {payModal.name} is ready.</div>
-                  <button style={{ ...btnRust, width: "100%", justifyContent: "center", padding: "12px 20px", fontSize: 14 }} onClick={() => { setPayModal(null); alert("In the live app, this downloads the steel schedule + connection PDF."); }}><Download size={15} /> Download PDF</button>
+                  <button style={{ ...btnRust, width: "100%", justifyContent: "center", padding: "12px 20px", fontSize: 14 }} onClick={() => { downloadReport(payModal.reportPath, payModal.name); setPayModal(null); }}><Download size={15} /> Download PDF</button>
                   <button style={{ ...btnGhost, width: "100%", justifyContent: "center", marginTop: 8, padding: "10px 20px", fontSize: 13 }} onClick={() => setPayModal(null)}>Close</button>
                 </div>
               )}
