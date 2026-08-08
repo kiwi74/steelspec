@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate, useSearchParams, Link } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
 import { theme as C } from "../lib/theme";
+import { useAuth } from "../lib/AuthContext";
 
 function FloatingInput({
   label, type = "text", value, onChange, name, error,
@@ -49,6 +50,7 @@ function FloatingInput({
 
 export default function AuthPage() {
   const navigate = useNavigate();
+  const { signUp, signIn, session } = useAuth();
   const [searchParams] = useSearchParams();
   const initialMode = searchParams.get("mode") === "signin" ? "signin" : "signup";
   const [mode, setMode] = useState<"signup" | "signin">(initialMode);
@@ -56,11 +58,20 @@ export default function AuthPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [errors, setErrors] = useState<{ name?: string; email?: string; password?: string }>({});
+  const [serverError, setServerError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [needsConfirmation, setNeedsConfirmation] = useState(false);
 
   useEffect(() => {
     setMode(searchParams.get("mode") === "signin" ? "signin" : "signup");
     setErrors({});
+    setServerError(null);
   }, [searchParams]);
+
+  // Already signed in? Skip straight to the dashboard.
+  useEffect(() => {
+    if (session) navigate("/dashboard", { replace: true });
+  }, [session, navigate]);
 
   const validate = () => {
     const next: { name?: string; email?: string; password?: string } = {};
@@ -81,10 +92,46 @@ export default function AuthPage() {
     return Object.keys(next).length === 0;
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const friendlyError = (msg: string): string => {
+    if (/already registered|already exists|User already registered/i.test(msg)) {
+      return "An account with that email already exists. Try signing in instead.";
+    }
+    if (/invalid login credentials/i.test(msg)) {
+      return "Incorrect email or password.";
+    }
+    if (/email not confirmed/i.test(msg)) {
+      return "Please check your inbox and confirm your email before signing in.";
+    }
+    return msg;
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setServerError(null);
     if (!validate()) return;
-    navigate("/dashboard");
+
+    setSubmitting(true);
+    if (mode === "signup") {
+      const { error, needsConfirmation } = await signUp(email.trim(), password, name.trim());
+      setSubmitting(false);
+      if (error) {
+        setServerError(friendlyError(error));
+        return;
+      }
+      if (needsConfirmation) {
+        setNeedsConfirmation(true);
+        return;
+      }
+      navigate("/dashboard");
+    } else {
+      const { error } = await signIn(email.trim(), password);
+      setSubmitting(false);
+      if (error) {
+        setServerError(friendlyError(error));
+        return;
+      }
+      navigate("/dashboard");
+    }
   };
 
   const updateName = (v: string) => { setName(v); if (errors.name) setErrors((e) => ({ ...e, name: undefined })); };
@@ -117,6 +164,28 @@ export default function AuthPage() {
         </div>
 
         {/* Mode tabs */}
+        {needsConfirmation ? (
+          <div style={{ textAlign: "center", padding: "12px 0 4px" }}>
+            <div style={{
+              width: 52, height: 52, borderRadius: "50%", background: C.greenBg, color: C.green,
+              display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 18px", fontSize: 24,
+            }}>
+              ✓
+            </div>
+            <h1 style={{ fontSize: 20, fontWeight: 700, marginBottom: 8, color: C.ink }}>Check your inbox</h1>
+            <p style={{ fontSize: 13.5, color: C.grey, lineHeight: 1.65, marginBottom: 24 }}>
+              We've sent a confirmation link to <strong style={{ color: C.ink }}>{email}</strong>. Click it to activate your account, then come back and sign in.
+            </p>
+            <button onClick={() => { setNeedsConfirmation(false); navigate("/signup?mode=signin", { replace: true }); }} style={{
+              width: "100%", padding: "13px 18px", background: "transparent", color: C.rust,
+              border: `1.5px solid ${C.rustBorder}`, borderRadius: 9, fontSize: 14, fontWeight: 600,
+              cursor: "pointer", fontFamily: "inherit",
+            }}>
+              Back to sign in
+            </button>
+          </div>
+        ) : (
+        <>
         <div style={{ display: "flex", background: C.bg, borderRadius: 9, padding: 4, marginBottom: 26, border: `1px solid ${C.borderLight}` }}>
           {(["signup", "signin"] as const).map((m) => (
             <button key={m} onClick={() => navigate(`/signup${m === "signin" ? "?mode=signin" : ""}`, { replace: true })}
@@ -153,14 +222,24 @@ export default function AuthPage() {
             </div>
           )}
 
-          <button type="submit" style={{
+          {serverError && (
+            <div style={{
+              marginTop: 16, padding: "10px 14px", background: "rgba(204,68,68,0.06)",
+              border: "1px solid rgba(204,68,68,0.25)", borderRadius: 8, color: "#c44", fontSize: 12.5,
+            }}>
+              {serverError}
+            </div>
+          )}
+
+          <button type="submit" disabled={submitting} style={{
             width: "100%", marginTop: 24, padding: "14px 18px", background: C.rust, color: "#fff",
-            border: "none", borderRadius: 9, fontSize: 14.5, fontWeight: 700, cursor: "pointer",
+            border: "none", borderRadius: 9, fontSize: 14.5, fontWeight: 700,
+            cursor: submitting ? "default" : "pointer", opacity: submitting ? 0.7 : 1,
             fontFamily: "inherit", transition: "background 0.2s",
           }}
-            onMouseEnter={(e) => (e.currentTarget.style.background = C.rustLight)}
-            onMouseLeave={(e) => (e.currentTarget.style.background = C.rust)}>
-            {mode === "signup" ? "Create account" : "Sign in"}
+            onMouseEnter={(e) => { if (!submitting) e.currentTarget.style.background = C.rustLight; }}
+            onMouseLeave={(e) => { if (!submitting) e.currentTarget.style.background = C.rust; }}>
+            {submitting ? "Please wait…" : mode === "signup" ? "Create account" : "Sign in"}
           </button>
         </form>
 
@@ -169,6 +248,8 @@ export default function AuthPage() {
           <a style={{ color: C.ink2, cursor: "pointer" }}>Terms</a> and{" "}
           <a style={{ color: C.ink2, cursor: "pointer" }}>Privacy Policy</a>.
         </div>
+        </>
+        )}
       </div>
     </div>
   );

@@ -1,41 +1,50 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import type { ReactNode } from "react";
-import { Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import {
   Home, Folder, Upload, FileText, CreditCard, Settings,
-  BarChart3, Clock, Download, Lock, Check, X, Menu,
+  BarChart3, Clock, Download, Lock, Check, X, Menu, LogOut,
 } from "lucide-react";
 import { theme as C } from "../lib/theme";
+import { supabase } from "../lib/supabase";
+import { useAuth } from "../lib/AuthContext";
 
-// === MOCK DATA ===
-type ProjectStatus = "done" | "proc" | "review";
+// === TYPES (mirror the Supabase schema) ===
+type ProjectStatus = "processing" | "review" | "done" | "failed";
+
 interface Project {
-  id: number; name: string; ref: string; client: string; date: string;
-  status: ProjectStatus; members: number; tonnage: number; format: string;
+  id: string;
+  name: string | null;
+  engineer_reference: string | null;
+  client: string | null;
+  status: ProjectStatus;
+  total_members: number;
+  total_weight_tonnes: number;
+  source_format: string | null;
+  created_at: string;
 }
 
-const PROJECTS: Project[] = [
-  { id: 1, name: "Selby Square", ref: "C1136", client: "Urban Fabrication", date: "04 Jul 2026", status: "done", members: 34, tonnage: 4.21, format: "DXF" },
-  { id: 2, name: "Henderson Residence", ref: "WA-2026-0847", client: "Williams & Assoc.", date: "02 Jul 2026", status: "done", members: 37, tonnage: 3.09, format: "IFC" },
-  { id: 3, name: "Matakana Barn House", ref: "MK-2026-114", client: "Coastal Homes", date: "01 Jul 2026", status: "review", members: 22, tonnage: 1.87, format: "DXF" },
-  { id: 4, name: "Albany Workshop Ext.", ref: "AW-2026-031", client: "Pace Construction", date: "28 Jun 2026", status: "done", members: 51, tonnage: 7.44, format: "IFC" },
-  { id: 5, name: "Riverhead New Build", ref: "RH-2026-092", client: "Fletcher Living", date: "26 Jun 2026", status: "proc", members: 0, tonnage: 0, format: "DWG" },
-];
-
-const INVOICES = [
-  { id: "INV-0006", project: "Selby Square", date: "04 Jul 2026", amount: 199, method: "Card •••• 4471", status: "paid" },
-  { id: "INV-0005", project: "Henderson Residence", date: "02 Jul 2026", amount: 199, method: "Card •••• 4471", status: "paid" },
-  { id: "INV-0004", project: "Albany Workshop Ext.", date: "28 Jun 2026", amount: 299, method: "Card •••• 4471", status: "paid" },
-  { id: "INV-0003", project: "Matakana Barn House", date: "01 Jul 2026", amount: 199, method: "—", status: "pending" },
-];
+interface Invoice {
+  id: string;
+  project_id: string | null;
+  total_cents: number;
+  status: string;
+  payment_method: string | null;
+  created_at: string;
+  projects: { name: string | null } | null;
+}
 
 const BADGE: Record<ProjectStatus, [string, string, string]> = {
   done: [C.green, C.greenBg, "Complete"],
-  proc: [C.amber, C.amberBg, "Processing"],
+  processing: [C.amber, C.amberBg, "Processing"],
   review: [C.blue, C.blueBg, "Needs review"],
+  failed: ["#c44", "#fbeaea", "Failed"],
 };
 
 type View = "dashboard" | "projects" | "upload" | "reports" | "billing" | "settings";
+
+const fmtDate = (iso: string) =>
+  new Date(iso).toLocaleDateString("en-NZ", { day: "2-digit", month: "short", year: "numeric" });
 
 // === SHARED UI ===
 function Badge({ status }: { status: ProjectStatus }) {
@@ -64,8 +73,12 @@ function fmtTag(f: string) {
   return <span style={{ padding: "3px 10px", fontSize: 10, fontWeight: 600, letterSpacing: 1, borderRadius: 4, background: C.rustBg, color: C.rust, border: `1px solid ${C.rustBorder}` }}>.{f}</span>;
 }
 
+function EmptyState({ message }: { message: string }) {
+  return <div style={{ padding: "44px 20px", textAlign: "center", color: C.grey, fontSize: 13 }}>{message}</div>;
+}
+
 function ProjectsTable({ rows, onOpen, compact }: { rows: Project[]; onOpen: (p: Project) => void; compact?: boolean }) {
-  if (!rows.length) return <div style={{ padding: "44px 20px", textAlign: "center", color: C.grey, fontSize: 13 }}>No projects yet — upload your first file to get started.</div>;
+  if (!rows.length) return <EmptyState message="No projects yet — upload your first file to get started." />;
   const th: React.CSSProperties = { textAlign: "left", padding: "10px 20px", fontSize: 10.5, fontWeight: 600, letterSpacing: 1, textTransform: "uppercase", color: C.greyLight, borderBottom: `1px solid ${C.borderLight}`, whiteSpace: "nowrap" };
   const td: React.CSSProperties = { padding: "13px 20px", borderBottom: `1px solid ${C.borderLight}`, verticalAlign: "middle" };
   return (
@@ -79,13 +92,16 @@ function ProjectsTable({ rows, onOpen, compact }: { rows: Project[]; onOpen: (p:
           <tr key={p.id} onClick={() => onOpen(p)} style={{ cursor: "pointer" }}
             onMouseEnter={(e) => (e.currentTarget.style.background = C.bg)}
             onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
-            <td style={td}><div style={{ fontWeight: 600 }}>{p.name}</div><div style={{ fontSize: 11.5, color: C.grey, fontFamily: C.mono, marginTop: 1 }}>{p.ref}</div></td>
-            <td style={{ ...td, color: C.ink2 }}>{p.client}</td>
-            {!compact && <td style={td}>{fmtTag(p.format)}</td>}
-            <td style={{ ...td, fontFamily: C.mono, fontSize: 12 }}>{p.status === "proc" ? "—" : p.members}</td>
-            <td style={{ ...td, fontFamily: C.mono, fontSize: 12 }}>{p.status === "proc" ? "—" : `${p.tonnage.toFixed(2)}t`}</td>
+            <td style={td}>
+              <div style={{ fontWeight: 600 }}>{p.name || "Untitled project"}</div>
+              <div style={{ fontSize: 11.5, color: C.grey, fontFamily: C.mono, marginTop: 1 }}>{p.engineer_reference || "—"}</div>
+            </td>
+            <td style={{ ...td, color: C.ink2 }}>{p.client || "—"}</td>
+            {!compact && <td style={td}>{p.source_format ? fmtTag(p.source_format) : "—"}</td>}
+            <td style={{ ...td, fontFamily: C.mono, fontSize: 12 }}>{p.status === "processing" ? "—" : p.total_members}</td>
+            <td style={{ ...td, fontFamily: C.mono, fontSize: 12 }}>{p.status === "processing" ? "—" : `${p.total_weight_tonnes.toFixed(2)}t`}</td>
             <td style={td}><Badge status={p.status} /></td>
-            <td style={{ ...td, textAlign: "right", color: C.grey, fontSize: 12 }}>{p.date}</td>
+            <td style={{ ...td, textAlign: "right", color: C.grey, fontSize: 12 }}>{fmtDate(p.created_at)}</td>
           </tr>
         ))}
       </tbody>
@@ -147,43 +163,126 @@ function UploadZone({ big, onFileSelected }: { big?: boolean; onFileSelected: (f
 
 // === MAIN DASHBOARD ===
 export default function Dashboard() {
+  const navigate = useNavigate();
+  const { user, profile, signOut } = useAuth();
+
   const [view, setView] = useState<View>("dashboard");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [modal, setModal] = useState<Project | null>(null);
-  const [proc, setProc] = useState(false);
-  const [prog, setProg] = useState(0);
-  const [stage, setStage] = useState("Parsing model file...");
+
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [loadingProjects, setLoadingProjects] = useState(true);
+  const [loadingInvoices, setLoadingInvoices] = useState(true);
+
+  const [uploading, setUploading] = useState(false);
+  const [uploadStage, setUploadStage] = useState("Uploading file...");
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
-  const handleFileSelected = (file: File) => {
-    setSelectedFile(file);
-    setProc(true);
-  };
   const [payModal, setPayModal] = useState<{ name: string; ref: string } | null>(null);
   const [payProcessing, setPayProcessing] = useState(false);
   const [paySuccess, setPaySuccess] = useState(false);
 
+  // === DATA FETCHING ===
+  const fetchProjects = useCallback(async () => {
+    setLoadingProjects(true);
+    const { data, error } = await supabase
+      .from("projects")
+      .select("id, name, engineer_reference, client, status, total_members, total_weight_tonnes, source_format, created_at")
+      .order("created_at", { ascending: false });
+    if (!error && data) setProjects(data as Project[]);
+    setLoadingProjects(false);
+  }, []);
+
+  const fetchInvoices = useCallback(async () => {
+    setLoadingInvoices(true);
+    const { data, error } = await supabase
+      .from("invoices")
+      .select("id, project_id, total_cents, status, payment_method, created_at, projects(name)")
+      .order("created_at", { ascending: false });
+    if (!error && data) setInvoices(data as unknown as Invoice[]);
+    setLoadingInvoices(false);
+  }, []);
+
   useEffect(() => {
-    if (!proc) return;
-    const stages = [
-      { at: 15, t: "Reading structural elements..." }, { at: 35, t: "Matching steel sections..." },
-      { at: 55, t: "Identifying connections..." }, { at: 75, t: "Calculating weights..." },
-      { at: 90, t: "Building report..." },
-    ];
-    let p = 0;
-    const t = setInterval(() => {
-      p += 1.6;
-      if (p > 100) p = 100;
-      setProg(p);
-      const s = stages.find((s) => s.at <= p && s.at > p - 1.6);
-      if (s) setStage(s.t);
-      if (p >= 100) { clearInterval(t); setTimeout(() => { setProc(false); setProg(0); setModal(PROJECTS[0]); }, 500); }
-    }, 50);
-    return () => clearInterval(t);
-  }, [proc]);
+    fetchProjects();
+    fetchInvoices();
+  }, [fetchProjects, fetchInvoices]);
+
+  // === UPLOAD FLOW: real file → Supabase Storage + a real project row ===
+  const handleFileSelected = async (file: File) => {
+    if (!user) return;
+    setSelectedFile(file);
+    setUploading(true);
+    setUploadError(null);
+    setUploadStage("Creating project...");
+
+    const ext = file.name.split(".").pop()?.toUpperCase() ?? "";
+    const sourceFormat = ["IFC", "DWG", "DXF"].includes(ext) ? ext : null;
+    const displayName = file.name.replace(/\.[^/.]+$/, "");
+
+    // 1. Create the project row
+    const { data: project, error: insertError } = await supabase
+      .from("projects")
+      .insert({
+        user_id: user.id,
+        name: displayName,
+        source_file: file.name,
+        source_format: sourceFormat,
+        status: "processing",
+      })
+      .select()
+      .single();
+
+    if (insertError || !project) {
+      setUploadError(insertError?.message ?? "Couldn't create the project. Please try again.");
+      setUploading(false);
+      return;
+    }
+
+    // 2. Upload the actual file to Storage, scoped under the user's folder
+    setUploadStage("Uploading file...");
+    const storagePath = `${user.id}/${project.id}/${file.name}`;
+    const { error: uploadErr } = await supabase.storage.from("uploads").upload(storagePath, file);
+
+    if (uploadErr) {
+      setUploadError(`File upload failed: ${uploadErr.message}`);
+      setUploading(false);
+      return;
+    }
+
+    // 3. Record the storage path on the project
+    await supabase.from("projects").update({ uploaded_file_path: storagePath }).eq("id", project.id);
+
+    // 4. Trigger extraction on the API service, if one is configured.
+    // Without this env var set, the project simply sits at "processing"
+    // until the API service is deployed (see steelspec-api/README.md).
+    const apiUrl = import.meta.env.VITE_API_URL;
+    if (apiUrl) {
+      setUploadStage("Starting extraction...");
+      try {
+        await fetch(`${apiUrl}/extract/${project.id}`, { method: "POST" });
+      } catch {
+        // Non-fatal — the project stays in "processing" and can be
+        // retried later once the API service is reachable.
+      }
+    }
+
+    setUploadStage("Upload complete");
+    await fetchProjects();
+    setUploading(false);
+    setView("projects");
+    setModal({ ...project, uploaded_file_path: storagePath } as Project);
+  };
 
   const startPayment = (p: { name: string; ref: string }) => { setPayModal(p); setPaySuccess(false); };
   const confirmPayment = () => { setPayProcessing(true); setTimeout(() => { setPayProcessing(false); setPaySuccess(true); }, 1400); };
+
+  const handleSignOut = async () => {
+    await signOut();
+    navigate("/");
+  };
 
   const navItems: [View, string, ReactNode][] = [
     ["dashboard", "Dashboard", <Home size={17} strokeWidth={1.7} />],
@@ -202,13 +301,18 @@ export default function Dashboard() {
     border: "none", background: active ? C.rustBg : "none", width: "100%", textAlign: "left",
   });
 
-  const months: [string, number][] = [["Feb", 8.2], ["Mar", 12.5], ["Apr", 9.8], ["May", 15.1], ["Jun", 16.6], ["Jul", 7.3]];
-  const maxT = Math.max(...months.map((m) => m[1]));
-
   const btnRust: React.CSSProperties = { display: "inline-flex", alignItems: "center", gap: 7, padding: "10px 18px", background: C.rust, color: "#fff", border: "none", borderRadius: 8, fontSize: 13.5, fontWeight: 600, cursor: "pointer" };
   const btnGhost: React.CSSProperties = { display: "inline-flex", alignItems: "center", gap: 7, padding: "10px 16px", background: C.card, color: C.ink2, border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 13, fontWeight: 500, cursor: "pointer" };
   const panel: React.CSSProperties = { background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, overflow: "hidden" };
   const panelHead: React.CSSProperties = { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "16px 20px", borderBottom: `1px solid ${C.borderLight}` };
+
+  // === DERIVED STATS ===
+  const doneProjects = projects.filter((p) => p.status === "done");
+  const totalTonnage = doneProjects.reduce((sum, p) => sum + (p.total_weight_tonnes || 0), 0);
+  const paidInvoices = invoices.filter((i) => i.status === "paid");
+  const displayName = profile?.full_name || user?.email?.split("@")[0] || "there";
+  const initials = (profile?.full_name || user?.email || "??")
+    .split(/\s+/).map((s) => s[0]).slice(0, 2).join("").toUpperCase();
 
   return (
     <div style={{ fontFamily: "Inter,-apple-system,sans-serif", background: C.bg, color: C.ink, fontSize: 14, minHeight: "100vh" }}>
@@ -227,7 +331,6 @@ export default function Dashboard() {
         </button>
       </div>
 
-      {/* Backdrop for mobile sidebar */}
       {sidebarOpen && (
         <div onClick={() => setSidebarOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.3)", zIndex: 55 }} className="ss-dash-mobile-toggle" />
       )}
@@ -250,55 +353,47 @@ export default function Dashboard() {
             ))}
           </div>
           <div style={{ padding: 16, borderTop: `1px solid ${C.borderLight}` }}>
-            <Link to="/" style={{ display: "flex", alignItems: "center", gap: 10, padding: 8, borderRadius: 8, textDecoration: "none", color: "inherit" }}>
-              <div style={{ width: 32, height: 32, borderRadius: "50%", background: C.rustBg, color: C.rust, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 13, border: `1px solid ${C.rustBorder}` }}>BA</div>
-              <div>
-                <div style={{ fontSize: 13, fontWeight: 600 }}>Blair Ashton</div>
-                <div style={{ fontSize: 11, color: C.grey }}>Urban Fabrication</div>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, padding: 8, borderRadius: 8 }}>
+              <div style={{ width: 32, height: 32, borderRadius: "50%", background: C.rustBg, color: C.rust, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 13, border: `1px solid ${C.rustBorder}`, flexShrink: 0 }}>{initials}</div>
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{profile?.full_name || "Your account"}</div>
+                <div style={{ fontSize: 11, color: C.grey, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{profile?.company_name || user?.email}</div>
               </div>
-            </Link>
+              <button onClick={handleSignOut} title="Sign out" style={{ background: "none", border: "none", color: C.grey, cursor: "pointer", padding: 4, flexShrink: 0 }}>
+                <LogOut size={16} />
+              </button>
+            </div>
           </div>
         </aside>
 
         {/* MAIN */}
         <main className="ss-dash-main">
           <style>{`
-            @media (max-width: 860px) {
-              .ss-dash-main { padding-top: 72px !important; }
-            }
+            @media (max-width: 860px) { .ss-dash-main { padding-top: 72px !important; } }
+            @keyframes spin { to { transform: rotate(360deg); } }
           `}</style>
+
           {view === "dashboard" && (
             <>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "20px 0 24px", gap: 16, flexWrap: "wrap" }}>
-                <div><h1 style={{ fontSize: 21, fontWeight: 700, letterSpacing: -0.4 }}>Good morning, Blair</h1><p style={{ fontSize: 13, color: C.grey, marginTop: 2 }}>Here's what's happening across your takeoffs.</p></div>
+                <div><h1 style={{ fontSize: 21, fontWeight: 700, letterSpacing: -0.4 }}>Good to see you, {displayName}</h1><p style={{ fontSize: 13, color: C.grey, marginTop: 2 }}>Here's what's happening across your takeoffs.</p></div>
                 <button style={btnRust} onClick={() => setView("upload")}><Upload size={15} /> New Takeoff</button>
               </div>
 
               <div className="ss-dash-stats" style={{ marginBottom: 24 }}>
-                <StatCard icon={<Folder size={17} />} label="Active projects" val="5" sub={<><b style={{ color: C.green }}>+2</b> this week</>} />
-                <StatCard icon={<BarChart3 size={17} />} label="Tonnage this month" val="16.6t" sub="across 4 completed jobs" />
-                <StatCard icon={<FileText size={17} />} label="Reports generated" val="23" sub="schedules + connections" />
-                <StatCard icon={<Clock size={17} />} label="Est. hours saved" val="61h" sub={<>vs manual takeoff · <b style={{ color: C.green }}>$7,930</b></>} />
+                <StatCard icon={<Folder size={17} />} label="Active projects" val={String(projects.length)} sub={loadingProjects ? "Loading…" : `${doneProjects.length} completed`} />
+                <StatCard icon={<BarChart3 size={17} />} label="Total tonnage" val={`${totalTonnage.toFixed(2)}t`} sub="across completed projects" />
+                <StatCard icon={<FileText size={17} />} label="Reports paid" val={String(paidInvoices.length)} sub="downloaded schedules" />
+                <StatCard icon={<Clock size={17} />} label="Account" val={profile?.plan === "workshop" ? "Workshop" : "Pay as you go"} sub={user?.email || ""} />
               </div>
 
               <div className="ss-dash-grid2">
                 <div style={panel}>
                   <div style={panelHead}><h3 style={{ fontSize: 14, fontWeight: 600 }}>Recent projects</h3><button style={{ fontSize: 12, color: C.rust, fontWeight: 600, background: "none", border: "none", cursor: "pointer" }} onClick={() => setView("projects")}>View all →</button></div>
-                  <ProjectsTable rows={PROJECTS.slice(0, 4)} onOpen={setModal} compact />
+                  {loadingProjects ? <EmptyState message="Loading projects…" /> : <ProjectsTable rows={projects.slice(0, 5)} onOpen={setModal} compact />}
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
                   <div style={panel}><div style={panelHead}><h3 style={{ fontSize: 14, fontWeight: 600 }}>Quick takeoff</h3></div><UploadZone onFileSelected={handleFileSelected} /></div>
-                  <div style={panel}>
-                    <div style={panelHead}><h3 style={{ fontSize: 14, fontWeight: 600 }}>Monthly tonnage</h3></div>
-                    <div style={{ display: "flex", alignItems: "flex-end", gap: 10, height: 130, padding: "20px 20px 8px" }}>
-                      {months.map(([m, v]) => (
-                        <div key={m} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 6, height: "100%", justifyContent: "flex-end" }}>
-                          <div style={{ width: "100%", maxWidth: 34, borderRadius: "5px 5px 0 0", background: `linear-gradient(180deg,${C.rustLight},${C.rust})`, height: `${(v / maxT) * 100}%` }} />
-                          <span style={{ fontSize: 10, color: C.grey }}>{m}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
                 </div>
               </div>
             </>
@@ -310,7 +405,7 @@ export default function Dashboard() {
                 <div><h1 style={{ fontSize: 21, fontWeight: 700 }}>Projects</h1><p style={{ fontSize: 13, color: C.grey, marginTop: 2 }}>All takeoffs across your workspace.</p></div>
                 <button style={btnRust} onClick={() => setView("upload")}><Upload size={15} /> New Takeoff</button>
               </div>
-              <div style={panel}><ProjectsTable rows={PROJECTS} onOpen={setModal} /></div>
+              <div style={panel}>{loadingProjects ? <EmptyState message="Loading projects…" /> : <ProjectsTable rows={projects} onOpen={setModal} />}</div>
             </>
           )}
 
@@ -328,7 +423,7 @@ export default function Dashboard() {
                   ))}
                 </div>
                 <div style={{ marginTop: 16, fontSize: 11.5, color: C.grey, lineHeight: 1.5 }}>
-                  Demo mode — file type is validated, but extraction is simulated. The parsing engine isn't connected to this interface yet.
+                  Your file uploads to your private, secure storage and a project is created immediately. Automated extraction is being connected next — until then, new projects will sit at "Processing" status.
                 </div>
               </div>
             </>
@@ -338,26 +433,30 @@ export default function Dashboard() {
             <>
               <div style={{ padding: "20px 0 24px" }}><h1 style={{ fontSize: 21, fontWeight: 700 }}>Reports</h1><p style={{ fontSize: 13, color: C.grey, marginTop: 2 }}>Download previously generated documents.</p></div>
               <div style={panel}>
-                <div style={{ overflowX: "auto" }}><table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-                  <thead><tr>
-                    {["Document", "Project", "Type", "Generated", ""].map((h, i) => (
-                      <th key={i} style={{ textAlign: i === 3 ? "right" : "left", padding: "10px 20px", fontSize: 10.5, fontWeight: 600, letterSpacing: 1, textTransform: "uppercase", color: C.greyLight, borderBottom: `1px solid ${C.borderLight}` }}>{h}</th>
-                    ))}
-                  </tr></thead>
-                  <tbody>
-                    {[["Steel Schedule + Connections", "Selby Square", "Schedule", "04 Jul 2026"], ["Fabrication Drawings (29 marks)", "Selby Square", "Fab Pack", "04 Jul 2026"], ["Steel Schedule + Connections", "Henderson Residence", "Schedule", "02 Jul 2026"], ["Steel Schedule + Connections", "Albany Workshop Ext.", "Schedule", "28 Jun 2026"]].map((r, i) => (
-                      <tr key={i}>
-                        <td style={{ padding: "13px 20px", borderBottom: `1px solid ${C.borderLight}`, fontWeight: 600 }}>{r[0]}</td>
-                        <td style={{ padding: "13px 20px", borderBottom: `1px solid ${C.borderLight}`, color: C.ink2 }}>{r[1]}</td>
-                        <td style={{ padding: "13px 20px", borderBottom: `1px solid ${C.borderLight}` }}>{fmtTag(r[2])}</td>
-                        <td style={{ padding: "13px 20px", borderBottom: `1px solid ${C.borderLight}`, textAlign: "right", color: C.grey, fontSize: 12 }}>{r[3]}</td>
-                        <td style={{ padding: "13px 20px", borderBottom: `1px solid ${C.borderLight}`, textAlign: "right" }}>
-                          <button style={{ ...btnGhost, padding: "6px 12px", fontSize: 12 }} onClick={() => startPayment({ name: r[1], ref: "" })}><Download size={14} /> PDF</button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table></div>
+                {loadingInvoices ? <EmptyState message="Loading reports…" /> : paidInvoices.length === 0 ? (
+                  <EmptyState message="No paid reports yet — unlock a report from a completed project to see it here." />
+                ) : (
+                  <div style={{ overflowX: "auto" }}><table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                    <thead><tr>
+                      {["Project", "Amount", "Method", "Date", ""].map((h, i) => (
+                        <th key={i} style={{ textAlign: i === 4 ? "right" : "left", padding: "10px 20px", fontSize: 10.5, fontWeight: 600, letterSpacing: 1, textTransform: "uppercase", color: C.greyLight, borderBottom: `1px solid ${C.borderLight}` }}>{h}</th>
+                      ))}
+                    </tr></thead>
+                    <tbody>
+                      {paidInvoices.map((inv) => (
+                        <tr key={inv.id}>
+                          <td style={{ padding: "13px 20px", borderBottom: `1px solid ${C.borderLight}`, fontWeight: 600 }}>{inv.projects?.name || "Untitled project"}</td>
+                          <td style={{ padding: "13px 20px", borderBottom: `1px solid ${C.borderLight}` }}>${(inv.total_cents / 100).toFixed(2)}</td>
+                          <td style={{ padding: "13px 20px", borderBottom: `1px solid ${C.borderLight}`, color: C.grey }}>{inv.payment_method || "—"}</td>
+                          <td style={{ padding: "13px 20px", borderBottom: `1px solid ${C.borderLight}`, color: C.grey, fontSize: 12 }}>{fmtDate(inv.created_at)}</td>
+                          <td style={{ padding: "13px 20px", borderBottom: `1px solid ${C.borderLight}`, textAlign: "right" }}>
+                            <button style={{ ...btnGhost, padding: "6px 12px", fontSize: 12 }} onClick={() => alert("In the live app, this downloads the steel schedule + connection PDF.")}><Download size={14} /> PDF</button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table></div>
+                )}
               </div>
             </>
           )}
@@ -369,8 +468,8 @@ export default function Dashboard() {
               <div style={{ ...panel, padding: "24px 24px 28px", marginBottom: 16 }}>
                 <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 16 }}>Plan</h3>
                 <div className="ss-dash-plans">
-                  <div style={{ border: `1.5px solid ${C.rust}`, background: C.rustBg, borderRadius: 12, padding: "22px 20px", position: "relative" }}>
-                    <span style={{ position: "absolute", top: -9, left: 18, background: C.rust, color: "#fff", fontSize: 10, fontWeight: 700, letterSpacing: 0.5, padding: "2px 10px", borderRadius: 20 }}>CURRENT</span>
+                  <div style={{ border: `1.5px solid ${profile?.plan !== "workshop" ? C.rust : C.border}`, background: profile?.plan !== "workshop" ? C.rustBg : "transparent", borderRadius: 12, padding: "22px 20px", position: "relative" }}>
+                    {profile?.plan !== "workshop" && <span style={{ position: "absolute", top: -9, left: 18, background: C.rust, color: "#fff", fontSize: 10, fontWeight: 700, letterSpacing: 0.5, padding: "2px 10px", borderRadius: 20 }}>CURRENT</span>}
                     <div style={{ fontSize: 13, fontWeight: 600, color: C.grey, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>Pay as you go</div>
                     <div style={{ fontSize: 26, fontWeight: 700, letterSpacing: -0.5 }}>$199<span style={{ fontSize: 13, fontWeight: 500, color: C.grey }}> /takeoff</span></div>
                     <div style={{ fontSize: 12.5, color: C.grey, margin: "8px 0 16px", lineHeight: 1.5 }}>Billed only when you download a report. No commitment, no monthly fee.</div>
@@ -378,14 +477,15 @@ export default function Dashboard() {
                       <div key={f} style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 12.5, color: C.ink2, marginBottom: 7 }}><Check size={13} color={C.rust} />{f}</div>
                     ))}
                   </div>
-                  <div style={{ border: `1.5px solid ${C.border}`, borderRadius: 12, padding: "22px 20px" }}>
+                  <div style={{ border: `1.5px solid ${profile?.plan === "workshop" ? C.rust : C.border}`, background: profile?.plan === "workshop" ? C.rustBg : "transparent", borderRadius: 12, padding: "22px 20px", position: "relative" }}>
+                    {profile?.plan === "workshop" && <span style={{ position: "absolute", top: -9, left: 18, background: C.rust, color: "#fff", fontSize: 10, fontWeight: 700, letterSpacing: 0.5, padding: "2px 10px", borderRadius: 20 }}>CURRENT</span>}
                     <div style={{ fontSize: 13, fontWeight: 600, color: C.grey, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>Workshop</div>
                     <div style={{ fontSize: 26, fontWeight: 700, letterSpacing: -0.5 }}>$749<span style={{ fontSize: 13, fontWeight: 500, color: C.grey }}> /month</span></div>
                     <div style={{ fontSize: 12.5, color: C.grey, margin: "8px 0 16px", lineHeight: 1.5 }}>For fabricators running 5+ takeoffs a month. Works out cheaper per job.</div>
                     {["Unlimited takeoffs & downloads", "Priority processing", "Team seats (coming soon)"].map((f) => (
                       <div key={f} style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 12.5, color: C.ink2, marginBottom: 7 }}><Check size={13} color={C.rust} />{f}</div>
                     ))}
-                    <button style={{ ...btnGhost, marginTop: 10, width: "100%", justifyContent: "center" }}>Switch to Workshop</button>
+                    {profile?.plan !== "workshop" && <button style={{ ...btnGhost, marginTop: 10, width: "100%", justifyContent: "center" }}>Switch to Workshop</button>}
                   </div>
                 </div>
               </div>
@@ -395,9 +495,9 @@ export default function Dashboard() {
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 18px", border: `1px solid ${C.border}`, borderRadius: 10, marginBottom: 12 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                     <div style={{ width: 40, height: 40, borderRadius: 9, background: C.borderLight, color: C.ink2, display: "flex", alignItems: "center", justifyContent: "center" }}><CreditCard size={17} /></div>
-                    <div><div style={{ fontWeight: 600, fontSize: 13.5 }}>Visa •••• 4471</div><div style={{ fontSize: 12, color: C.grey }}>Expires 08/28 · Default</div></div>
+                    <div><div style={{ fontWeight: 600, fontSize: 13.5 }}>No card on file</div><div style={{ fontSize: 12, color: C.grey }}>Add a card to unlock reports</div></div>
                   </div>
-                  <button style={{ ...btnGhost, padding: "6px 12px", fontSize: 12 }}>Manage</button>
+                  <button style={{ ...btnGhost, padding: "6px 12px", fontSize: 12 }}>Add card</button>
                 </div>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 18px", border: `1px solid ${C.border}`, borderRadius: 10, opacity: 0.7 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
@@ -409,34 +509,34 @@ export default function Dashboard() {
                   </div>
                   <button disabled style={{ ...btnGhost, padding: "6px 12px", fontSize: 12, opacity: 0.5, cursor: "not-allowed" }}>Connect</button>
                 </div>
-                <div style={{ fontSize: 12, color: C.grey, marginTop: 12, lineHeight: 1.6 }}>
-                  BlinkPay open banking integration is in progress, pending BNZ approval. Once live, you'll be able to pay directly from your business bank account with no card processing fees.
-                </div>
               </div>
 
               <div style={panel}>
                 <div style={panelHead}><h3 style={{ fontSize: 14, fontWeight: 600 }}>Invoice history</h3></div>
-                <div style={{ overflowX: "auto" }}><table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-                  <thead><tr>
-                    {["Invoice", "Project", "Method", "Amount", "Status", "Date"].map((h, i) => (
-                      <th key={i} style={{ textAlign: i === 3 || i === 5 ? "right" : "left", padding: "10px 20px", fontSize: 10.5, fontWeight: 600, letterSpacing: 1, textTransform: "uppercase", color: C.greyLight, borderBottom: `1px solid ${C.borderLight}` }}>{h}</th>
-                    ))}
-                  </tr></thead>
-                  <tbody>
-                    {INVOICES.map((inv) => (
-                      <tr key={inv.id}>
-                        <td style={{ padding: "13px 20px", borderBottom: `1px solid ${C.borderLight}`, fontFamily: C.mono, fontSize: 12.5 }}>{inv.id}</td>
-                        <td style={{ padding: "13px 20px", borderBottom: `1px solid ${C.borderLight}`, color: C.ink2 }}>{inv.project}</td>
-                        <td style={{ padding: "13px 20px", borderBottom: `1px solid ${C.borderLight}`, color: C.grey }}>{inv.method}</td>
-                        <td style={{ padding: "13px 20px", borderBottom: `1px solid ${C.borderLight}`, textAlign: "right", fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>${inv.amount}</td>
-                        <td style={{ padding: "13px 20px", borderBottom: `1px solid ${C.borderLight}` }}>
-                          <span style={{ padding: "3px 10px", borderRadius: 20, fontSize: 11, fontWeight: 600, color: inv.status === "paid" ? C.green : C.amber, background: inv.status === "paid" ? C.greenBg : C.amberBg }}>{inv.status === "paid" ? "Paid" : "Pending"}</span>
-                        </td>
-                        <td style={{ padding: "13px 20px", borderBottom: `1px solid ${C.borderLight}`, textAlign: "right", color: C.grey, fontSize: 12 }}>{inv.date}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table></div>
+                {loadingInvoices ? <EmptyState message="Loading invoices…" /> : invoices.length === 0 ? (
+                  <EmptyState message="No invoices yet." />
+                ) : (
+                  <div style={{ overflowX: "auto" }}><table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                    <thead><tr>
+                      {["Project", "Method", "Amount", "Status", "Date"].map((h, i) => (
+                        <th key={i} style={{ textAlign: i === 2 || i === 4 ? "right" : "left", padding: "10px 20px", fontSize: 10.5, fontWeight: 600, letterSpacing: 1, textTransform: "uppercase", color: C.greyLight, borderBottom: `1px solid ${C.borderLight}` }}>{h}</th>
+                      ))}
+                    </tr></thead>
+                    <tbody>
+                      {invoices.map((inv) => (
+                        <tr key={inv.id}>
+                          <td style={{ padding: "13px 20px", borderBottom: `1px solid ${C.borderLight}`, color: C.ink2 }}>{inv.projects?.name || "Untitled project"}</td>
+                          <td style={{ padding: "13px 20px", borderBottom: `1px solid ${C.borderLight}`, color: C.grey }}>{inv.payment_method || "—"}</td>
+                          <td style={{ padding: "13px 20px", borderBottom: `1px solid ${C.borderLight}`, textAlign: "right", fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>${(inv.total_cents / 100).toFixed(2)}</td>
+                          <td style={{ padding: "13px 20px", borderBottom: `1px solid ${C.borderLight}` }}>
+                            <span style={{ padding: "3px 10px", borderRadius: 20, fontSize: 11, fontWeight: 600, color: inv.status === "paid" ? C.green : C.amber, background: inv.status === "paid" ? C.greenBg : C.amberBg }}>{inv.status === "paid" ? "Paid" : "Pending"}</span>
+                          </td>
+                          <td style={{ padding: "13px 20px", borderBottom: `1px solid ${C.borderLight}`, textAlign: "right", color: C.grey, fontSize: 12 }}>{fmtDate(inv.created_at)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table></div>
+                )}
               </div>
             </>
           )}
@@ -444,7 +544,14 @@ export default function Dashboard() {
           {view === "settings" && (
             <>
               <div style={{ padding: "20px 0 24px" }}><h1 style={{ fontSize: 21, fontWeight: 700 }}>Settings</h1><p style={{ fontSize: 13, color: C.grey, marginTop: 2 }}>Workspace preferences.</p></div>
-              <div style={{ ...panel, padding: 32 }}><div style={{ textAlign: "center", color: C.grey, fontSize: 13, padding: "44px 20px" }}>Workspace settings coming soon.</div></div>
+              <div style={{ ...panel, padding: 32 }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: 16, maxWidth: 420 }}>
+                  <div><div style={{ fontSize: 11, color: C.grey, textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 4 }}>Email</div><div style={{ fontSize: 14, fontWeight: 600 }}>{user?.email}</div></div>
+                  <div><div style={{ fontSize: 11, color: C.grey, textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 4 }}>Full name</div><div style={{ fontSize: 14, fontWeight: 600 }}>{profile?.full_name || "—"}</div></div>
+                  <div><div style={{ fontSize: 11, color: C.grey, textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 4 }}>Company</div><div style={{ fontSize: 14, fontWeight: 600 }}>{profile?.company_name || "—"}</div></div>
+                  <button onClick={handleSignOut} style={{ ...btnGhost, marginTop: 8, width: "fit-content" }}><LogOut size={15} /> Sign out</button>
+                </div>
+              </div>
             </>
           )}
         </main>
@@ -456,47 +563,51 @@ export default function Dashboard() {
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", padding: "24px 24px 0" }}>
                 <div>
                   <div style={{ fontSize: 11, color: C.rust, fontWeight: 600, letterSpacing: 1, textTransform: "uppercase", marginBottom: 3 }}>Project</div>
-                  <h2 style={{ fontSize: 19, fontWeight: 700 }}>{modal.name}</h2>
-                  <div style={{ fontSize: 11.5, color: C.grey, fontFamily: C.mono, marginTop: 2 }}>{modal.ref} · {modal.client}</div>
+                  <h2 style={{ fontSize: 19, fontWeight: 700 }}>{modal.name || "Untitled project"}</h2>
+                  <div style={{ fontSize: 11.5, color: C.grey, fontFamily: C.mono, marginTop: 2 }}>{modal.engineer_reference || "—"} {modal.client ? `· ${modal.client}` : ""}</div>
                 </div>
                 <button onClick={() => setModal(null)} style={{ background: "none", border: "none", fontSize: 20, color: C.grey, padding: 4, cursor: "pointer" }}><X size={20} /></button>
               </div>
               <div style={{ padding: "20px 24px 24px" }}>
                 <div className="ss-kv-grid" style={{ margin: "16px 0" }}>
-                  {[["Status", <Badge status={modal.status} />], ["Source format", `.${modal.format}`], ["Steel members", modal.members || "—"], ["Total tonnage", modal.tonnage ? `${modal.tonnage.toFixed(2)} t` : "—"]].map(([l, v], i) => (
+                  {[["Status", <Badge status={modal.status} />], ["Source format", modal.source_format ? `.${modal.source_format}` : "—"], ["Steel members", modal.status === "processing" ? "—" : modal.total_members], ["Total tonnage", modal.status === "processing" ? "—" : `${modal.total_weight_tonnes.toFixed(2)} t`]].map(([l, v], i) => (
                     <div key={i} style={{ padding: "10px 14px", background: C.bg, borderRadius: 8, border: `1px solid ${C.borderLight}` }}>
                       <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: 0.8, color: C.grey }}>{l}</div>
                       <div style={{ fontSize: 14, fontWeight: 600, marginTop: 2, fontVariantNumeric: "tabular-nums" }}>{v}</div>
                     </div>
                   ))}
                 </div>
-                {modal.status !== "proc" ? (
+                {modal.status === "done" ? (
                   <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                    <button style={btnRust} onClick={() => { setModal(null); startPayment(modal); }}><Lock size={13} /> Unlock PDF — $199</button>
+                    <button style={btnRust} onClick={() => { setModal(null); startPayment({ name: modal.name || "Untitled project", ref: modal.engineer_reference || "" }); }}><Lock size={13} /> Unlock PDF — $199</button>
                     <button style={btnGhost}>View extraction</button>
                   </div>
                 ) : (
-                  <div style={{ textAlign: "center", color: C.grey, fontSize: 13, padding: "20px 0" }}>Still processing — usually under 2 minutes.</div>
+                  <div style={{ textAlign: "center", color: C.grey, fontSize: 13, padding: "20px 0" }}>
+                    {modal.status === "processing"
+                      ? "Your file has been uploaded and is waiting on the extraction engine. This part of SteelSpec is still being connected."
+                      : "This project needs review before a report can be generated."}
+                  </div>
                 )}
               </div>
             </div>
           </div>
         )}
 
-        {/* PROCESSING MODAL */}
-        {proc && (
+        {/* UPLOAD PROGRESS MODAL */}
+        {uploading && (
           <div style={{ position: "fixed", inset: 0, background: "rgba(26,26,26,.45)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
             <div style={{ background: C.card, borderRadius: 14, maxWidth: 380, width: "100%", textAlign: "center", padding: "36px 28px" }}>
               <div style={{ fontSize: 12, fontWeight: 700, color: C.rust, letterSpacing: 3, marginBottom: 24 }}>STEELSPEC</div>
               <div style={{ width: 44, height: 44, borderRadius: "50%", border: `2.5px solid ${C.border}`, borderTopColor: C.rust, animation: "spin 1s linear infinite", margin: "0 auto 18px" }} />
-              <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 3 }}>{stage}</div>
-              <div style={{ fontSize: 12.5, color: C.grey }}>{selectedFile?.name ?? "structural_model.ifc"}</div>
-              <div style={{ width: 280, height: 5, background: C.borderLight, borderRadius: 3, overflow: "hidden", margin: "16px auto 6px" }}>
-                <div style={{ height: "100%", background: `linear-gradient(90deg,${C.rustDark},${C.rustLight})`, borderRadius: 3, width: `${prog}%`, transition: "width .15s linear" }} />
-              </div>
-              <div style={{ fontSize: 11.5, color: C.grey }}>{Math.round(prog)}%</div>
+              <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 3 }}>{uploadStage}</div>
+              <div style={{ fontSize: 12.5, color: C.grey }}>{selectedFile?.name}</div>
+              {uploadError && (
+                <div style={{ marginTop: 16, padding: "10px 14px", background: "rgba(204,68,68,0.06)", border: "1px solid rgba(204,68,68,0.25)", borderRadius: 8, color: "#c44", fontSize: 12.5, textAlign: "left" }}>
+                  {uploadError}
+                </div>
+              )}
             </div>
-            <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
           </div>
         )}
 
@@ -528,7 +639,7 @@ export default function Dashboard() {
                         <div style={{ position: "absolute", inset: 3, borderRadius: "50%", background: C.rust }} />
                       </div>
                       <div style={{ width: 32, height: 32, borderRadius: 8, background: C.borderLight, color: C.ink2, display: "flex", alignItems: "center", justifyContent: "center" }}><CreditCard size={16} /></div>
-                      <div style={{ flex: 1 }}><div style={{ fontWeight: 600, fontSize: 13.5 }}>Visa •••• 4471</div><div style={{ fontSize: 11.5, color: C.grey }}>Card on file</div></div>
+                      <div style={{ flex: 1 }}><div style={{ fontWeight: 600, fontSize: 13.5 }}>Card on file</div><div style={{ fontSize: 11.5, color: C.grey }}>Demo payment</div></div>
                     </div>
 
                     <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 16px", border: `1.5px solid ${C.border}`, borderRadius: 10, opacity: 0.55, cursor: "not-allowed" }}>
