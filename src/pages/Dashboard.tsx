@@ -121,7 +121,7 @@ function UploadZone({ big, onFileSelected }: { big?: boolean; onFileSelected: (f
     if (!file) return;
     const isValid = ACCEPTED_EXTENSIONS.some((ext) => file.name.toLowerCase().endsWith(ext));
     if (!isValid) {
-      setError(`"${file.name}" isn't supported. Upload an .IFC, .DWG, or .DXF file.`);
+      setError(`"${file.name}" isn't supported. Upload an .IFC, .DWG, .PDF, or .DXF file.`);
       return;
     }
     setError(null);
