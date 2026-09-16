@@ -111,7 +111,7 @@ function ProjectsTable({ rows, onOpen, compact }: { rows: Project[]; onOpen: (p:
   );
 }
 
-const ACCEPTED_EXTENSIONS = [".ifc", ".dwg", ".dxf"];
+const ACCEPTED_EXTENSIONS = [".ifc", ".dwg", ".dxf", ".pdf"];
 
 function UploadZone({ big, onFileSelected }: { big?: boolean; onFileSelected: (file: File) => void }) {
   const [drag, setDrag] = useState(false);
@@ -133,7 +133,7 @@ function UploadZone({ big, onFileSelected }: { big?: boolean; onFileSelected: (f
       <input
         id="ss-dash-file-input"
         type="file"
-        accept=".ifc,.dwg,.dxf"
+        accept=".ifc,.dwg,.dxf,.pdf"
         onChange={(e) => { validate(e.target.files?.[0]); e.target.value = ""; }}
         style={{ display: "none" }}
       />
