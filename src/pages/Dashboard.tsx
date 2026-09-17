@@ -8,6 +8,7 @@ import {
 import { theme as C } from "../lib/theme";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../lib/AuthContext";
+import DrawingViewer from "../components/DrawingViewer";
 
 // === TYPES (mirror the Supabase schema) ===
 type ProjectStatus = "processing" | "review" | "done" | "failed";
@@ -19,6 +20,7 @@ interface Project {
   client: string | null;
   status: ProjectStatus;
   total_members: number;
+  total_connections: number;
   total_weight_tonnes: number;
   source_format: string | null;
   error_message: string | null;
@@ -121,7 +123,7 @@ function UploadZone({ big, onFileSelected }: { big?: boolean; onFileSelected: (f
     if (!file) return;
     const isValid = ACCEPTED_EXTENSIONS.some((ext) => file.name.toLowerCase().endsWith(ext));
     if (!isValid) {
-      setError(`"${file.name}" isn't supported. Upload an .IFC, .DWG, or .DXF file.`);
+      setError(`"${file.name}" isn't supported. Upload an .IFC, .DWG, .DXF, or .PDF file.`);
       return;
     }
     setError(null);
@@ -152,7 +154,7 @@ function UploadZone({ big, onFileSelected }: { big?: boolean; onFileSelected: (f
         </div>
         <div style={{ fontSize: 14.5, fontWeight: 600, marginBottom: 4 }}>Drop your structural file here</div>
         <div style={{ fontSize: 12.5, color: C.grey, marginBottom: 14 }}>or click to browse — we'll extract every member and connection</div>
-        <div style={{ display: "flex", gap: 7, justifyContent: "center" }}>{fmtTag("IFC")}{fmtTag("DWG")}{fmtTag("DXF")}</div>
+        <div style={{ display: "flex", gap: 7, justifyContent: "center" }}>{fmtTag("IFC")}{fmtTag("DWG")}{fmtTag("DXF")}{fmtTag("PDF")}</div>
       </div>
       {error && (
         <div style={{ margin: big ? "12px 0 0" : "12px 20px 0", padding: "10px 14px", background: "rgba(204,68,68,0.06)", border: "1px solid rgba(204,68,68,0.25)", borderRadius: 8, color: "#c44", fontSize: 12.5, textAlign: "left" }}>
@@ -171,6 +173,7 @@ export default function Dashboard() {
   const [view, setView] = useState<View>("dashboard");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [modal, setModal] = useState<Project | null>(null);
+  const [viewerProjectId, setViewerProjectId] = useState<string | null>(null);
 
   const [projects, setProjects] = useState<Project[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
@@ -191,7 +194,7 @@ export default function Dashboard() {
     setLoadingProjects(true);
     const { data, error } = await supabase
       .from("projects")
-      .select("id, name, engineer_reference, client, status, total_members, total_weight_tonnes, source_format, error_message, report_pdf_path, created_at")
+      .select("id, name, engineer_reference, client, status, total_members, total_connections, total_weight_tonnes, source_format, error_message, report_pdf_path, created_at")
       .order("created_at", { ascending: false });
     if (!error && data) setProjects(data as Project[]);
     setLoadingProjects(false);
@@ -222,7 +225,7 @@ export default function Dashboard() {
     const interval = setInterval(async () => {
       const { data, error } = await supabase
         .from("projects")
-        .select("id, name, engineer_reference, client, status, total_members, total_weight_tonnes, source_format, error_message, report_pdf_path, created_at")
+        .select("id, name, engineer_reference, client, status, total_members, total_connections, total_weight_tonnes, source_format, error_message, report_pdf_path, created_at")
         .eq("id", modal.id)
         .single();
 
@@ -244,7 +247,7 @@ export default function Dashboard() {
     setUploadStage("Creating project...");
 
     const ext = file.name.split(".").pop()?.toUpperCase() ?? "";
-    const sourceFormat = ["IFC", "DWG", "DXF"].includes(ext) ? ext : null;
+    const sourceFormat = ["IFC", "DWG", "DXF", "PDF"].includes(ext) ? ext : null;
     const displayName = file.name.replace(/\.[^/.]+$/, "");
 
     // 1. Create the project row
@@ -459,7 +462,7 @@ export default function Dashboard() {
               <div style={{ ...panel, padding: 24 }}>
                 <UploadZone big onFileSelected={handleFileSelected} />
                 <div className="ss-upload-info-grid" style={{ marginTop: 20 }}>
-                  {[["IFC / BIM", "Highest accuracy — direct from Revit, Tekla, or ArchiCAD."], ["DWG / DXF", "CAD drawings — extraction with a quick review step."], ["What you get", "Steel schedule, connection report, and total tonnage as PDF."]].map(([t, d], i) => (
+                  {[["IFC / BIM", "Highest accuracy — direct from Revit, Tekla, or ArchiCAD."], ["DWG / DXF", "CAD drawings — extraction with a quick review step."], ["PDF", "Structural drawings analysed page-by-page, with every value traceable back to its source page."]].map(([t, d], i) => (
                     <div key={i} style={{ padding: "14px 16px", background: C.bg, borderRadius: 10, border: `1px solid ${C.borderLight}` }}>
                       <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4, color: C.rust }}>{t}</div>
                       <div style={{ fontSize: 12, color: C.grey, lineHeight: 1.55 }}>{d}</div>
@@ -467,7 +470,7 @@ export default function Dashboard() {
                   ))}
                 </div>
                 <div style={{ marginTop: 16, fontSize: 11.5, color: C.grey, lineHeight: 1.5 }}>
-                  Your file uploads to your private, secure storage and a project is created immediately. Automated extraction is being connected next — until then, new projects will sit at "Processing" status.
+                  Your file uploads to your private, secure storage and a project is created immediately.
                 </div>
               </div>
             </>
@@ -614,7 +617,13 @@ export default function Dashboard() {
               </div>
               <div style={{ padding: "20px 24px 24px" }}>
                 <div className="ss-kv-grid" style={{ margin: "16px 0" }}>
-                  {[["Status", <Badge status={modal.status} />], ["Source format", modal.source_format ? `.${modal.source_format}` : "—"], ["Steel members", modal.status === "processing" ? "—" : modal.total_members], ["Total tonnage", modal.status === "processing" ? "—" : `${modal.total_weight_tonnes.toFixed(2)} t`]].map(([l, v], i) => (
+                  {[
+                    ["Status", <Badge status={modal.status} />],
+                    ["Source format", modal.source_format ? `.${modal.source_format}` : "—"],
+                    ["Steel members", modal.status === "processing" ? "—" : modal.total_members],
+                    ["Connections", modal.status === "processing" ? "—" : modal.total_connections],
+                    ["Total tonnage", modal.status === "processing" ? "—" : `${modal.total_weight_tonnes.toFixed(2)} t`],
+                  ].map(([l, v], i) => (
                     <div key={i} style={{ padding: "10px 14px", background: C.bg, borderRadius: 8, border: `1px solid ${C.borderLight}` }}>
                       <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: 0.8, color: C.grey }}>{l}</div>
                       <div style={{ fontSize: 14, fontWeight: 600, marginTop: 2, fontVariantNumeric: "tabular-nums" }}>{v}</div>
@@ -624,7 +633,7 @@ export default function Dashboard() {
                 {modal.status === "done" || modal.status === "review" ? (
                   <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
                     <button style={btnRust} onClick={() => { setModal(null); startPayment({ id: modal.id, name: modal.name || "Untitled project", ref: modal.engineer_reference || "", reportPath: modal.report_pdf_path }); }}><Lock size={13} /> Unlock PDF — $199</button>
-                    <button style={btnGhost}>View extraction</button>
+                    <button style={btnGhost} onClick={() => setViewerProjectId(modal.id)}>View extraction</button>
                   </div>
                 ) : modal.status === "processing" ? (
                   <div style={{ textAlign: "center", color: C.grey, fontSize: 13, padding: "20px 0", display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
@@ -639,6 +648,11 @@ export default function Dashboard() {
               </div>
             </div>
           </div>
+        )}
+
+        {/* DRAWING VIEWER — source page + extracted data, for PDF-sourced projects */}
+        {viewerProjectId && (
+          <DrawingViewer projectId={viewerProjectId} onClose={() => setViewerProjectId(null)} />
         )}
 
         {/* UPLOAD PROGRESS MODAL */}
