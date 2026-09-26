@@ -9,6 +9,7 @@ import { theme as C } from "../lib/theme";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../lib/AuthContext";
 import DrawingViewer from "../components/DrawingViewer";
+import ConnectionReviewSurface from "../components/ConnectionReviewSurface";
 
 // === TYPES (mirror the Supabase schema) ===
 type ProjectStatus = "processing" | "review" | "done" | "failed";
@@ -169,12 +170,13 @@ function UploadZone({ big, onFileSelected }: { big?: boolean; onFileSelected: (f
 // === MAIN DASHBOARD ===
 export default function Dashboard() {
   const navigate = useNavigate();
-  const { user, profile, signOut } = useAuth();
+  const { user, profile, signOut, session } = useAuth();
 
   const [view, setView] = useState<View>("dashboard");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [modal, setModal] = useState<Project | null>(null);
   const [viewerProjectId, setViewerProjectId] = useState<string | null>(null);
+  const [reviewProjectId, setReviewProjectId] = useState<string | null>(null);
 
   const [projects, setProjects] = useState<Project[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
@@ -290,8 +292,14 @@ export default function Dashboard() {
     const apiUrl = import.meta.env.VITE_API_URL;
     if (apiUrl) {
       setUploadStage("Starting extraction...");
+      // The API authenticates the caller from the Supabase access token, sent as
+      // a request header and nowhere else.
+      const token = session?.access_token;
       try {
-        await fetch(`${apiUrl}/extract/${project.id}`, { method: "POST" });
+        await fetch(`${apiUrl}/extract/${project.id}`, {
+          method: "POST",
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
       } catch {
         // Non-fatal — the project stays in "processing" and can be
         // retried later once the API service is reachable.
@@ -635,6 +643,7 @@ export default function Dashboard() {
                   <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
                     <button style={btnRust} onClick={() => { setModal(null); startPayment({ id: modal.id, name: modal.name || "Untitled project", ref: modal.engineer_reference || "", reportPath: modal.report_pdf_path }); }}><Lock size={13} /> Unlock PDF — $199</button>
                     <button style={btnGhost} onClick={() => setViewerProjectId(modal.id)}>View extraction</button>
+                    <button style={btnGhost} onClick={() => setReviewProjectId(modal.id)}>Review extraction</button>
                   </div>
                 ) : modal.status === "processing" ? (
                   <div style={{ textAlign: "center", color: C.grey, fontSize: 13, padding: "20px 0", display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
@@ -654,6 +663,11 @@ export default function Dashboard() {
         {/* DRAWING VIEWER — source page + extracted data, for PDF-sourced projects */}
         {viewerProjectId && (
           <DrawingViewer projectId={viewerProjectId} onClose={() => setViewerProjectId(null)} />
+        )}
+
+        {/* CONNECTION REVIEW — the production review surface, rendered from the API */}
+        {reviewProjectId && (
+          <ConnectionReviewSurface projectId={reviewProjectId} onClose={() => setReviewProjectId(null)} />
         )}
 
         {/* UPLOAD PROGRESS MODAL */}
