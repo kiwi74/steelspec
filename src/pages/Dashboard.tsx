@@ -10,6 +10,13 @@ import { supabase } from "../lib/supabase";
 import { useAuth } from "../lib/AuthContext";
 import { readProject, readProjects } from "../lib/projects";
 import type { Project } from "../lib/projects";
+import {
+  DocumentsRefused,
+  batchFullyRegistered,
+  registerDocuments,
+  registeredDocumentIds,
+} from "../lib/documents";
+import type { DocumentOutcome } from "../lib/documents";
 import { Badge, EmptyState, ErrorState, FormatTag, LoadingState } from "../components/ui";
 import { btnGhost, btnRust, fmtDate, fmtTonnes, panel, panelHead } from "../lib/ui";
 import DrawingViewer from "../components/DrawingViewer";
@@ -104,20 +111,28 @@ function ProjectsTable({ rows, onOpen, compact }: { rows: Project[]; onOpen: (p:
 // exist.
 const ACCEPTED_EXTENSIONS = [".dxf", ".pdf"];
 
-function UploadZone({ big, onFileSelected }: { big?: boolean; onFileSelected: (file: File) => void }) {
+// A document set, not a document: the input offers a multi-selection and both the picker
+// and a drop hand over EVERY file, never `[0]`. Validation is per file — one unsupported
+// file is named and shown, and it never makes the files beside it look rejected too, nor
+// the valid ones look like the whole selection.
+function UploadZone({ big, onFilesSelected }: { big?: boolean; onFilesSelected: (accepted: File[]) => void }) {
   const [drag, setDrag] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const validate = (file: File | undefined) => {
-    if (!file) return;
-    const isValid = ACCEPTED_EXTENSIONS.some((ext) => file.name.toLowerCase().endsWith(ext));
-    if (!isValid) {
-      
-      setError(`"${file.name}" isn't supported yet. Upload a .DXF or .PDF file.`);
-      return;
+  const validate = (selected: File[]) => {
+    if (selected.length === 0) return;
+    const accepted: File[] = [];
+    const rejected: string[] = [];
+    for (const file of selected) {
+      if (ACCEPTED_EXTENSIONS.some((ext) => file.name.toLowerCase().endsWith(ext))) accepted.push(file);
+      else rejected.push(file.name);
     }
-    setError(null);
-    onFileSelected(file);
+    setError(
+      rejected.length === 0
+        ? null
+        : `${rejected.map((name) => `"${name}"`).join(", ")} ${rejected.length === 1 ? "isn't" : "aren't"} supported yet. Upload .DXF or .PDF files.`,
+    );
+    if (accepted.length > 0) onFilesSelected(accepted);
   };
 
   return (
@@ -126,13 +141,14 @@ function UploadZone({ big, onFileSelected }: { big?: boolean; onFileSelected: (f
         id="ss-dash-file-input"
         type="file"
         accept=".dxf,.pdf"
-        onChange={(e) => { validate(e.target.files?.[0]); e.target.value = ""; }}
+        multiple
+        onChange={(e) => { validate(Array.from(e.target.files ?? [])); e.target.value = ""; }}
         style={{ display: "none" }}
       />
       <div onClick={() => document.getElementById("ss-dash-file-input")?.click()}
         onDragOver={(e) => { e.preventDefault(); setDrag(true); }}
         onDragLeave={() => setDrag(false)}
-        onDrop={(e) => { e.preventDefault(); setDrag(false); validate(e.dataTransfer.files?.[0]); }}
+        onDrop={(e) => { e.preventDefault(); setDrag(false); validate(Array.from(e.dataTransfer.files)); }}
         style={{
           margin: big ? 0 : 20, padding: big ? "52px 24px" : "34px 20px",
           border: `1.5px dashed ${error ? C.red : drag ? C.rust : C.border}`, borderRadius: 10, textAlign: "center", cursor: "pointer",
@@ -142,8 +158,8 @@ function UploadZone({ big, onFileSelected }: { big?: boolean; onFileSelected: (f
         <div style={{ width: 46, height: 46, margin: "0 auto 12px", borderRadius: 10, border: `2px solid ${drag ? C.rust : C.border}`, color: drag ? C.rust : C.grey, display: "flex", alignItems: "center", justifyContent: "center", transition: "all .25s" }}>
           <Upload size={20} />
         </div>
-        <div style={{ fontSize: 14.5, fontWeight: 600, marginBottom: 4 }}>Drop your structural file here</div>
-        <div style={{ fontSize: 12.5, color: C.grey, marginBottom: 14 }}>or click to browse — we'll extract every member and connection</div>
+        <div style={{ fontSize: 14.5, fontWeight: 600, marginBottom: 4 }}>Drop your structural files here</div>
+        <div style={{ fontSize: 12.5, color: C.grey, marginBottom: 14 }}>or click to browse — one project can hold a whole drawing set</div>
         <div style={{ display: "flex", gap: 7, justifyContent: "center" }}><FormatTag f="DXF" /><FormatTag f="PDF" /></div>
       </div>
       {error && (
@@ -175,9 +191,16 @@ export default function Dashboard() {
   const [reportError, setReportError] = useState<string | null>(null);
 
   const [uploading, setUploading] = useState(false);
-  const [uploadStage, setUploadStage] = useState("Uploading file...");
+  const [uploadStage, setUploadStage] = useState("Creating project...");
   const [uploadFailure, setUploadFailure] = useState<UploadFailure | null>(null);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  // The selected document set, and the name the user has confirmed for it. The name is a
+  // FIELD rather than something derived at creation time: one file's basename cannot name a
+  // set of documents, and inventing one silently is the thing this replaced.
+  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
+  const [projectName, setProjectName] = useState("");
+  // What the service said about each file. `null` until a batch has been sent.
+  const [registration, setRegistration] = useState<DocumentOutcome[] | null>(null);
+  const [extractionNotStarted, setExtractionNotStarted] = useState<string | null>(null);
 
   // === DATA FETCHING ===
   const fetchProjects = useCallback(async () => {
@@ -238,25 +261,56 @@ export default function Dashboard() {
     return () => clearInterval(interval);
   }, [modal]);
 
-  // === UPLOAD FLOW: real file → Supabase Storage + a real project row ===
-  const handleFileSelected = async (file: File) => {
+  // === UPLOAD FLOW: one project, a document set, and the service's own verdict per file ===
+  //
+  // The browser touches neither storage nor `project_documents` on this path any more. It
+  // creates ONE project row, hands the whole batch to the deployed ingestion route, and
+  // reports what that route said about each file. Hashing, duplicate detection, same-name
+  // collisions and the document rows themselves are the service's, and none of it is
+  // reproduced here.
+
+  const handleFilesSelected = (accepted: File[]) => {
+    setPendingFiles(accepted);
+    setRegistration(null);
+    setExtractionNotStarted(null);
+    setUploadFailure(null);
+    // A draft the user can change. The first file's basename is a STARTING POINT and is
+    // never written as the project's name until the user confirms it — one file cannot
+    // name a set of documents, and inventing a name silently is what this replaced.
+    setProjectName(accepted[0]?.name.replace(/\.[^/.]+$/, "") ?? "");
+    setView("upload");
+  };
+
+  const handleCreateProject = async () => {
     if (!user) return;
-    setSelectedFile(file);
+    const name = projectName.trim();
+    if (pendingFiles.length === 0) return;
+    if (!name) {
+      setUploadFailure({
+        stage: "Project name required",
+        message: "Give this project a name before it is created.",
+        projectId: null,
+      });
+      return;
+    }
+
     setUploading(true);
     setUploadFailure(null);
+    setRegistration(null);
+    setExtractionNotStarted(null);
     setUploadStage("Creating project...");
 
-    const ext = file.name.split(".").pop()?.toUpperCase() ?? "";
+    const first = pendingFiles[0];
+    const ext = first.name.split(".").pop()?.toUpperCase() ?? "";
     const sourceFormat = ["DXF", "PDF"].includes(ext) ? ext : null;
-    const displayName = file.name.replace(/\.[^/.]+$/, "");
 
-    // 1. Create the project row
+    // 1. ONE project for the whole set. Never one project per file.
     const { data: project, error: insertError } = await supabase
       .from("projects")
       .insert({
         user_id: user.id,
-        name: displayName,
-        source_file: file.name,
+        name,
+        source_file: first.name,
         source_format: sourceFormat,
         status: "processing",
       })
@@ -266,94 +320,112 @@ export default function Dashboard() {
     if (insertError || !project) {
       setUploading(false);
       setUploadFailure({
-        stage: "Upload failed",
+        stage: "Project not created",
         message: insertError?.message ?? "Couldn't create the project. Please try again.",
         projectId: null,
       });
       return;
     }
 
-    // 2. Upload the actual file to Storage, scoped under the user's folder
-    setUploadStage("Uploading file...");
-    const storagePath = `${user.id}/${project.id}/${file.name}`;
-    const { error: uploadErr } = await supabase.storage.from("uploads").upload(storagePath, file);
-
-    if (uploadErr) {
+    const token = session?.access_token;
+    if (!token) {
       setUploading(false);
       setUploadFailure({
-        stage: "Upload failed",
-        message: `File upload failed: ${uploadErr.message}`,
-        projectId: null,
-      });
-      return;
-    }
-
-    // 3. Record the storage path on the project
-    await supabase.from("projects").update({ uploaded_file_path: storagePath }).eq("id", project.id);
-
-    // 4. Ask the API service to start the extraction.
-    //
-    // At this point the file IS in storage and the project row DOES exist, so a
-    // failure here is not a failed upload and is not reported as one. It is also
-    // not nothing: this request is the only thing that starts an extraction, so if
-    // it does not succeed then no extraction has started — and carrying on to the
-    // project page would show a project sitting at "Processing" under a line
-    // promising that it updates automatically. That promise is the thing removed
-    // here. When the trigger does not succeed the flow stops and says so.
-    //
-    // Nothing is retried, and NOTHING about the project row is written. A failed
-    // request is a fact about this page's request, not evidence that the project
-    // failed, so the persisted status is left exactly as the backend left it.
-    const apiUrl = import.meta.env.VITE_API_URL;
-    if (apiUrl) {
-      setUploadStage("Starting extraction...");
-      // The API authenticates the caller from the Supabase access token, sent as
-      // a request header and nowhere else.
-      const token = session?.access_token;
-      let triggerFailure: string | null = null;
-      try {
-        const res = await fetch(`${apiUrl}/extract/${project.id}`, {
-          method: "POST",
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
-        });
-        // A refusal is as much a "not started" as an unreachable service is. The
-        // body is deliberately not read: what the service said about the refusal
-        // is its own to state, and this page does not re-word it.
-        if (!res.ok) {
-          triggerFailure = `Your file was uploaded, but the extraction service did not start an extraction (HTTP ${res.status}).`;
-        }
-      } catch {
-        triggerFailure = "Your file was uploaded, but the extraction service could not be reached, so no extraction was started.";
-      }
-
-      if (triggerFailure) {
-        setUploading(false);
-        setUploadFailure({ stage: "Extraction not started", message: triggerFailure, projectId: project.id });
-        // The project row is real and belongs on the dashboard behind this modal,
-        // so the list is refreshed — the reader is not left hunting for it.
-        await fetchProjects();
-        return;
-      }
-    } else {
-      // No extraction service is configured for this build, so no extraction was
-      // started here either. The project row and the uploaded file both exist and
-      // are kept; what is not kept is the implication that work is under way.
-      setUploading(false);
-      setUploadFailure({
-        stage: "Extraction not started",
-        message: "Your file was uploaded, but this build has no extraction service configured, so no extraction was started.",
+        stage: "Documents not registered",
+        message: "Your session has expired, so no document was registered. Sign in again and upload the files.",
         projectId: project.id,
       });
       await fetchProjects();
       return;
     }
 
-    setUploadStage("Upload complete");
-    await fetchProjects();
+    // 2. Register the whole set through the deployed ingestion route, once.
+    setUploadStage("Registering documents...");
+    let result;
+    try {
+      result = await registerDocuments(project.id, token, pendingFiles);
+    } catch (error) {
+      setUploading(false);
+      setRegistration(null);
+      setUploadFailure({
+        stage: "Documents not registered",
+        message:
+          error instanceof DocumentsRefused
+            ? error.message
+            : "The document service could not be reached, so no document was registered.",
+        projectId: project.id,
+      });
+      await fetchProjects();
+      return;
+    }
+    setRegistration(result.documents);
+
+    // 3. Extraction, once per REGISTERED DOCUMENT — never once per selected file. The same
+    //    bytes chosen twice collapse to the one document the first copy registered, so the
+    //    document is read once; a file that failed registered nothing and is never
+    //    extracted. This is why the ids come from the service's outcomes and not from the
+    //    files the user picked.
+    const documentIds = registeredDocumentIds(result);
+    if (documentIds.length === 0) {
+      setUploading(false);
+      await fetchProjects();
+      return;
+    }
+
+    const apiUrl = import.meta.env.VITE_API_URL;
+    if (!apiUrl) {
+      setUploading(false);
+      setExtractionNotStarted(
+        "This build has no extraction service configured, so no extraction was started. The project and its documents are stored.",
+      );
+      await fetchProjects();
+      return;
+    }
+
+    setUploadStage("Starting extraction...");
+    const notStarted: string[] = [];
+    for (const documentId of documentIds) {
+      try {
+        // ADDRESSED, always. An unaddressed request is refused by the service the moment a
+        // project holds more than one document — that refusal is the guard, not an
+        // obstacle, and this page does not work around it.
+        const res = await fetch(`${apiUrl}/extract/${project.id}`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ document_id: documentId }),
+        });
+        // A refusal is as much a "not started" as an unreachable service is. The body is
+        // deliberately not read: what the service said about a refusal is its own to state.
+        if (!res.ok) notStarted.push(documentId);
+      } catch {
+        notStarted.push(documentId);
+      }
+    }
+
     setUploading(false);
-    // Land on the project that was just created — it is a page of its own now,
-    // and that page is where its analysis state is shown.
-    navigate(`/projects/${project.id}/overview`);
+    if (notStarted.length > 0) {
+      setExtractionNotStarted(
+        notStarted.length === documentIds.length
+          ? "The documents are registered, but the extraction service did not start an extraction for any of them."
+          : `The documents are registered, but the extraction service did not start an extraction for ${notStarted.length} of them.`,
+      );
+    }
+    await fetchProjects();
+
+    // Land on the project only when the WHOLE batch registered and every extraction that
+    // was owed to it started. A mixed batch stays here with the per-file outcome in front
+    // of the reader, because that outcome is the thing they need to see.
+    if (batchFullyRegistered(result) && notStarted.length === 0) {
+      navigate(`/projects/${project.id}/overview`);
+    }
+  };
+
+  const closeUploadModal = () => {
+    setUploadFailure(null);
+    setRegistration(null);
+    setExtractionNotStarted(null);
+    setPendingFiles([]);
+    setProjectName("");
   };
 
   // The only route to a report. It reads the project's own report path, asks
@@ -507,7 +579,7 @@ export default function Dashboard() {
                   {loadingProjects ? <LoadingState message="Loading projects…" /> : projectsError ? <ErrorState message={projectsError} onRetry={fetchProjects} /> : <ProjectsTable rows={projects.slice(0, 5)} onOpen={setModal} compact />}
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-                  <div style={panel}><div style={panelHead}><h3 style={{ fontSize: 14, fontWeight: 600 }}>Quick takeoff</h3></div><UploadZone onFileSelected={handleFileSelected} /></div>
+                  <div style={panel}><div style={panelHead}><h3 style={{ fontSize: 14, fontWeight: 600 }}>Quick takeoff</h3></div><UploadZone onFilesSelected={handleFilesSelected} /></div>
                 </div>
               </div>
             </>
@@ -515,9 +587,49 @@ export default function Dashboard() {
 
           {view === "upload" && (
             <>
-              <div style={{ padding: "20px 0 24px" }}><h1 style={{ fontSize: 21, fontWeight: 700 }}>New Takeoff</h1><p style={{ fontSize: 13, color: C.grey, marginTop: 2 }}>Upload the engineer's model file to start extraction.</p></div>
+              <div style={{ padding: "20px 0 24px" }}><h1 style={{ fontSize: 21, fontWeight: 700 }}>New Takeoff</h1><p style={{ fontSize: 13, color: C.grey, marginTop: 2 }}>Upload the engineer's drawing set — one project can hold several files.</p></div>
               <div style={{ ...panel, padding: 24 }}>
-                <UploadZone big onFileSelected={handleFileSelected} />
+                <UploadZone big onFilesSelected={handleFilesSelected} />
+
+                {/* The selected set and the name it will be created under. The name is
+                    required and editable: it is the ONE thing the user is deciding here,
+                    and a project holding five documents cannot be named after one of them. */}
+                {pendingFiles.length > 0 && (
+                  <div style={{ marginTop: 20, padding: 20, background: C.bg, border: `1px solid ${C.borderLight}`, borderRadius: 12 }}>
+                    <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: 0.8, textTransform: "uppercase", color: C.grey, marginBottom: 8 }}>
+                      {pendingFiles.length} document{pendingFiles.length === 1 ? "" : "s"} selected
+                    </div>
+                    <ul style={{ margin: "0 0 18px", padding: 0, listStyle: "none" }}>
+                      {pendingFiles.map((file, index) => (
+                        <li key={`${file.name}-${index}`} style={{ fontSize: 12.5, color: C.ink2, fontFamily: C.mono, padding: "3px 0" }}>
+                          {file.name}
+                        </li>
+                      ))}
+                    </ul>
+                    <label htmlFor="ss-project-name" style={{ display: "block", fontSize: 11, fontWeight: 600, letterSpacing: 0.8, textTransform: "uppercase", color: C.grey, marginBottom: 6 }}>
+                      Project name
+                    </label>
+                    <input
+                      id="ss-project-name"
+                      className="ss-input"
+                      value={projectName}
+                      onChange={(e) => setProjectName(e.target.value)}
+                      placeholder="Name this project"
+                      style={{ width: "100%", maxWidth: 420, padding: "11px 13px", background: C.card, border: `1px solid ${C.border}`, borderRadius: 9, fontSize: 14, fontFamily: "inherit", color: C.ink, boxSizing: "border-box" }}
+                    />
+                    <div style={{ fontSize: 11.5, color: C.grey, marginTop: 6 }}>
+                      All {pendingFiles.length} file{pendingFiles.length === 1 ? "" : "s"} are registered against this one project.
+                    </div>
+                    <button
+                      className="ss-focus"
+                      style={{ ...btnRust, marginTop: 16, opacity: uploading || !projectName.trim() ? 0.6 : 1, cursor: uploading || !projectName.trim() ? "default" : "pointer" }}
+                      disabled={uploading || !projectName.trim()}
+                      onClick={handleCreateProject}
+                    >
+                      <Upload size={15} /> Create project and start extraction
+                    </button>
+                  </div>
+                )}
                 <div className="ss-upload-info-grid" style={{ marginTop: 20 }}>
                   {[["DXF", "CAD drawings — members and connections parsed directly, with a quick review step."], ["PDF", "Structural drawings analysed page-by-page, with every value traceable back to its source page."]].map(([t, d], i) => (
                     <div key={i} style={{ padding: "14px 16px", background: C.bg, borderRadius: 10, border: `1px solid ${C.borderLight}` }}>
@@ -765,9 +877,9 @@ export default function Dashboard() {
             outcome when it stopped. The failure state is the same panel with the
             spinner replaced by the reason: no green, no tick, nothing that reads as
             a finished job. */}
-        {(uploading || uploadFailure) && (
+        {(uploading || uploadFailure || registration) && (
           <div style={{ position: "fixed", inset: 0, background: "rgba(26,26,26,.45)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
-            <div style={{ background: C.card, borderRadius: 14, maxWidth: 380, width: "100%", textAlign: "center", padding: "36px 28px" }}>
+            <div style={{ background: C.card, borderRadius: 14, maxWidth: 460, width: "100%", textAlign: "center", padding: "36px 28px" }}>
               <div style={{ fontSize: 12, fontWeight: 700, color: C.rust, letterSpacing: 3, marginBottom: 24 }}>STEELSPEC</div>
               {uploading && (
                 <div style={{ width: 44, height: 44, borderRadius: "50%", border: `2.5px solid ${C.border}`, borderTopColor: C.rust, animation: "spin 1s linear infinite", margin: "0 auto 18px" }} />
@@ -775,21 +887,57 @@ export default function Dashboard() {
               <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 3, color: uploadFailure ? C.red : C.ink }}>
                 {uploadFailure ? uploadFailure.stage : uploadStage}
               </div>
-              <div style={{ fontSize: 12.5, color: C.grey }}>{selectedFile?.name}</div>
+              {uploading && (
+                <div style={{ fontSize: 12.5, color: C.grey }}>
+                  {pendingFiles.length} file{pendingFiles.length === 1 ? "" : "s"}
+                </div>
+              )}
+
+              {/* What the service said about EACH file, in its own words. A file that
+                  failed is shown as failed and is never counted as part of a success; a
+                  duplicate is shown as the document it already is rather than as a second
+                  one. Nothing here is inferred from local state — every line is the
+                  registration outcome. */}
+              {!uploading && registration && (
+                <ul style={{ margin: "14px 0 0", padding: 0, listStyle: "none", textAlign: "left" }}>
+                  {registration.map((document, index) => (
+                    <li key={`${document.file_name}-${index}`} style={{ padding: "7px 0", borderTop: index === 0 ? "none" : `1px solid ${C.borderLight}`, fontSize: 12.5, lineHeight: 1.5 }}>
+                      <span style={{ fontFamily: C.mono, fontWeight: 600, color: document.status === "failed" ? C.red : C.ink }}>
+                        {document.status === "created" ? "✓ " : document.status === "deduplicated" ? "↺ " : "✗ "}
+                        {document.file_name}
+                      </span>
+                      <div style={{ color: document.status === "failed" ? C.red : C.grey, fontSize: 12 }}>
+                        {document.status === "created"
+                          ? "Registered — extraction started"
+                          : document.status === "deduplicated"
+                            ? "Already registered on this project — the same document, read once"
+                            : document.reason || document.code || "This file was not registered."}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+
+              {extractionNotStarted && (
+                <div style={{ marginTop: 14, padding: "10px 14px", background: C.amberBg, border: `1px solid ${C.borderLight}`, borderRadius: 8, color: C.ink2, fontSize: 12.5, textAlign: "left", lineHeight: 1.55 }}>
+                  {extractionNotStarted}
+                </div>
+              )}
+
               {uploadFailure && (
                 <div style={{ marginTop: 16, padding: "10px 14px", background: "rgba(204,68,68,0.06)", border: `1px solid ${C.redBorder}`, borderRadius: 8, color: C.red, fontSize: 12.5, textAlign: "left" }}>
                   {uploadFailure.message}
                 </div>
               )}
-              {uploadFailure && (
+              {!uploading && (
                 <div style={{ display: "flex", gap: 8, justifyContent: "center", marginTop: 18 }}>
-                  <button style={btnGhost} onClick={() => setUploadFailure(null)}>Close</button>
+                  <button style={btnGhost} onClick={closeUploadModal}>Close</button>
                   {/* Offered only where a project row and its uploaded file genuinely
                       exist. It is a destination the reader chooses — the page does not
                       take them there, because arriving at a project page is not the
                       same thing as an extraction having started. */}
-                  {uploadFailure.projectId && (
-                    <button style={btnGhost} onClick={() => { const id = uploadFailure.projectId; setUploadFailure(null); navigate(`/projects/${id}/overview`); }}>Open project</button>
+                  {uploadFailure?.projectId && (
+                    <button style={btnGhost} onClick={() => { const id = uploadFailure.projectId; closeUploadModal(); navigate(`/projects/${id}/overview`); }}>Open project</button>
                   )}
                 </div>
               )}
