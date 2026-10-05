@@ -237,9 +237,26 @@ async function call<T>(path: string, token: string, init?: RequestInit): Promise
 }
 
 /** Records the revision-0 baseline a review cannot start without. Idempotent: opening
- *  an already-open review writes nothing and consumes no revision. */
-export function openReview(projectId: string, token: string): Promise<ReviewOpening> {
-  return call<ReviewOpening>(`/production/review/${projectId}/open`, token, { method: "POST" });
+ *  an already-open review writes nothing and consumes no revision.
+ *
+ *  `documentId` is the SAME document scope the review is read under (E2E-002J): the
+ *  baseline is built from one document's readings, so a project whose readings belong to
+ *  more than one must say which, or the reconstruction refuses rather than choosing.
+ *
+ *  The opening route states its scope in the JSON BODY, not a query string — a body may
+ *  carry exactly one field, `document_id` — so this is the one call `scopeQuery` does not
+ *  serve. An absent scope sends NO body at all, which is the request every
+ *  single-document project has always made. */
+export function openReview(
+  projectId: string,
+  token: string,
+  documentId?: string | null,
+): Promise<ReviewOpening> {
+  const init: RequestInit = { method: "POST" };
+  // No scope named -> no body, exactly as before. A scope named -> the single field the
+  // opening contract permits, and `call` supplies the Content-Type from it.
+  if (documentId) init.body = JSON.stringify({ document_id: documentId });
+  return call<ReviewOpening>(`/production/review/${projectId}/open`, token, init);
 }
 
 /** The project's review as structured data. Read-only: it records nothing, claims

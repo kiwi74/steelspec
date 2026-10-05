@@ -265,7 +265,10 @@ export default function ProjectReview() {
     setOpening(true);
     setRefusal(null);
     try {
-      await openReview(project.id, token);
+      // The baseline is reconstructed from ONE document's readings, so the document this
+      // review is about is named here exactly as it is named to the read and the
+      // resolution. It comes from the URL like every other use of it — no second state.
+      await openReview(project.id, token, selectedDocumentId);
       await load();
     } catch (error) {
       setRefusal(error instanceof ReviewRefused ? error : new ReviewRefused(0, "REVIEW_UNREACHABLE", "The review service could not be reached."));
@@ -537,7 +540,16 @@ export default function ProjectReview() {
         </div>
       </div>
 
-      {surfaceOpen && <ConnectionReviewSurface projectId={project.id} onClose={() => setSurfaceOpen(false)} />}
+      {/* The rendered surface reads the SAME document this page is showing. Without it the
+          surface reconstructs the project as a whole, which for a project whose readings
+          belong to more than one document is a refusal rather than a review. */}
+      {surfaceOpen && (
+        <ConnectionReviewSurface
+          projectId={project.id}
+          documentId={selectedDocumentId}
+          onClose={() => setSurfaceOpen(false)}
+        />
+      )}
     </>
   );
 }

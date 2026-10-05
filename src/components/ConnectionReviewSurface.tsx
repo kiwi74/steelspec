@@ -11,7 +11,22 @@ import { useAuth } from "../lib/AuthContext";
 //
 // The Supabase access token is attached as a request header and nowhere else: it is
 // never put in a URL, query string, the iframe document, storage, or rendered output.
-export default function ConnectionReviewSurface({ projectId, onClose }: { projectId: string; onClose: () => void }) {
+export default function ConnectionReviewSurface({
+  projectId,
+  documentId,
+  onClose,
+}: {
+  projectId: string;
+  /** E2E-002J — the document this review is about, when the page that opened the surface
+   *  has chosen one. It is the SAME scope the review was read under: the rendered surface
+   *  must show the document the page around it is showing, never a project-wide
+   *  reconstruction that refuses to choose between documents.
+   *
+   *  Optional on purpose. The Dashboard has no document-selection concept and passes none,
+   *  which is the pre-existing request and behaves exactly as it always did. */
+  documentId?: string | null;
+  onClose: () => void;
+}) {
   const { session } = useAuth();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -62,7 +77,13 @@ export default function ConnectionReviewSurface({ projectId, onClose }: { projec
       }
 
       try {
-        const res = await fetch(`${apiUrl}/production/review/${projectId}/workflow`, {
+        // The chosen document travels as a query parameter here, which is the shape this
+        // route's scope takes — `URLSearchParams` does the encoding, so an id is never
+        // pasted into a URL raw. No document chosen -> no query string at all.
+        const scope = documentId
+          ? `?${new URLSearchParams({ document_id: documentId })}`
+          : "";
+        const res = await fetch(`${apiUrl}/production/review/${projectId}/workflow${scope}`, {
           method: "GET",
           headers: { Authorization: `Bearer ${token}` },
         });
@@ -98,7 +119,9 @@ export default function ConnectionReviewSurface({ projectId, onClose }: { projec
 
     load();
     return () => { cancelled = true; };
-  }, [projectId, session?.access_token]);
+    // `documentId` is a dependency because it is part of the REQUEST: choosing a different
+    // document must re-read the workflow rather than leave the previous one on screen.
+  }, [projectId, documentId, session?.access_token]);
 
   return (
     <div
