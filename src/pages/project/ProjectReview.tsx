@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from "react";
-import { useOutletContext } from "react-router-dom";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useOutletContext, useSearchParams } from "react-router-dom";
 import { ClipboardCheck, RefreshCw } from "lucide-react";
 import { theme as C } from "../../lib/theme";
 import type { Project } from "../../lib/projects";
@@ -13,7 +13,9 @@ import {
   openReview,
   readReview,
   resolveConnection,
+  selectableDocuments,
 } from "../../lib/review";
+import type { ReviewDocumentSummary } from "../../lib/review";
 import type {
   AnswerDraft,
   ResolutionEntry,
@@ -209,6 +211,14 @@ export default function ProjectReview() {
   const [outcome, setOutcome] = useState<ResolutionOutcome | null>(null);
   const [drafts, setDrafts] = useState<Record<string, AnswerDraft>>({});
 
+  // The document a review is about lives in the URL, not in component state: a review of a
+  // named document is a linkable address, and reloading it restores the same scope. When a
+  // project holds exactly one document that carries readings there is nothing to choose, so
+  // the selection is made once and written to the URL — which is how the single-document
+  // behaviour of every project so far is preserved rather than special-cased.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const selectedDocumentId = searchParams.get("document_id");
+
   const load = useCallback(async () => {
     if (!token) {
       setLoading(false);
@@ -218,16 +228,34 @@ export default function ProjectReview() {
     setLoading(true);
     setRefusal(null);
     try {
-      setDoc(await readReview(project.id, token));
+      setDoc(await readReview(project.id, token, selectedDocumentId));
     } catch (error) {
       setDoc(null);
       setRefusal(error instanceof ReviewRefused ? error : new ReviewRefused(0, "REVIEW_UNREACHABLE", "The review service could not be reached. It may be starting up — try again in a moment."));
     } finally {
       setLoading(false);
     }
-  }, [project.id, token]);
+  }, [project.id, token, selectedDocumentId]);
 
   useEffect(() => { load(); }, [load]);
+
+  const selectable: ReviewDocumentSummary[] = useMemo(() => selectableDocuments(doc), [doc]);
+  const selectedDocument = selectable.find((d) => d.document_id === selectedDocumentId) ?? null;
+
+  // One document with readings is not a choice, so it is made for the reader and recorded
+  // in the URL. More than one IS a choice, and it is never made here.
+  useEffect(() => {
+    if (selectedDocumentId || loading || selectable.length !== 1) return;
+    const next = new URLSearchParams(searchParams);
+    next.set("document_id", selectable[0].document_id);
+    setSearchParams(next, { replace: true });
+  }, [selectedDocumentId, loading, selectable, searchParams, setSearchParams]);
+
+  const chooseDocument = (documentId: string) => {
+    const next = new URLSearchParams(searchParams);
+    next.set("document_id", documentId);
+    setSearchParams(next);
+  };
 
   // Opening is a deliberate act, not a side effect of looking at the page: it records the
   // revision-0 baseline, and it is the only write that happens before a human decides
@@ -271,7 +299,15 @@ export default function ProjectReview() {
       // The revision is the one the service recorded and this screen was shown. It is
       // never computed here, so a decision made against a stale review is refused by
       // the service rather than applied.
-      const result = await resolveConnection(project.id, connection.package_id, token, doc.revision, resolutions);
+      const result = await resolveConnection(
+        project.id,
+        connection.package_id,
+        token,
+        doc.revision,
+        resolutions,
+        // Resolved under the SAME document the review was read under.
+        selectedDocumentId,
+      );
       setOutcome(result);
       setDrafts({});
       await load();
@@ -300,7 +336,9 @@ export default function ProjectReview() {
           )}
         </div>
         <p style={{ fontSize: 13, color: C.grey, marginTop: 2 }}>
-          Detailed engineering review for this project's connections.
+          {selectedDocument
+            ? <>Detailed engineering review for this project's connections, from <span style={{ fontFamily: C.mono, color: C.ink2, fontWeight: 600 }}>{selectedDocument.file_name || selectedDocument.document_id}</span>.</>
+            : "Detailed engineering review for this project's connections."}
         </p>
       </div>
 
@@ -308,6 +346,10 @@ export default function ProjectReview() {
         <div style={panel}><div style={{ padding: 28, fontSize: 13, color: C.grey }}>Loading the review…</div></div>
       )}
 
+      {/* A refusal is shown as a refusal — except when the refusal is the service declining
+          to CHOOSE between documents and this page is offering that choice. In that one case
+          the chooser above is the answer, and a red "could not be shown" band beside it
+          would say the review is broken rather than that it is waiting for a decision. */}
       {!loading && refusal && (
         <div style={{ ...panel, marginBottom: 16 }}>
           <div style={panelHead}><h3 style={{ fontSize: 14, fontWeight: 600 }}>The review could not be shown</h3></div>
@@ -339,7 +381,8 @@ export default function ProjectReview() {
         </div>
       )}
 
-      {!loading && !refusal && doc?.refusal_code && (
+      {!loading && !refusal && doc?.refusal_code
+        && !(selectable.length > 1 && !selectedDocumentId) && (
         <div style={{ ...panel, marginBottom: 16 }}>
           <div style={panelHead}><h3 style={{ fontSize: 14, fontWeight: 600 }}>The review could not be reconstructed</h3></div>
           <div style={{ padding: "20px 24px", fontSize: 13, color: C.ink2, lineHeight: 1.65 }}>
@@ -352,7 +395,67 @@ export default function ProjectReview() {
         </div>
       )}
 
-      {!loading && !refusal && doc?.revision_recorded && !doc.refusal_code && (
+      {/* Which document this review is about. One document with readings is stated, not
+          offered — there is nothing to choose. More than one is a genuine choice, and it is
+          the reader's: nowhere on this page is a document selected on their behalf. */}
+      {!loading && !refusal && doc && selectable.length > 0 && (
+        <div style={{ ...panel, marginBottom: 16 }}>
+          <div style={panelHead}>
+            <h3 style={{ fontSize: 14, fontWeight: 600 }}>
+              {selectable.length > 1 ? "Which document is this review about?" : "Document"}
+            </h3>
+          </div>
+          <div style={{ padding: selectable.length > 1 ? "16px 20px 20px" : "16px 20px", fontSize: 13, color: C.ink2, lineHeight: 1.6 }}>
+            {selectable.length > 1 && (
+              <p style={{ margin: "0 0 12px", color: C.grey }}>
+                This project holds more than one document that has been read. A review is of one of them,
+                and SteelSpec will not choose: which document to review is a decision about the engineering,
+                not about the files.
+              </p>
+            )}
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {selectable.map((document) => {
+                const isSelected = document.document_id === selectedDocumentId;
+                return (
+                  <button
+                    key={document.document_id}
+                    className="ss-focus"
+                    onClick={() => chooseDocument(document.document_id)}
+                    aria-pressed={isSelected}
+                    style={{
+                      textAlign: "left", padding: "10px 14px", borderRadius: 9, cursor: "pointer",
+                      fontFamily: "inherit", fontSize: 13,
+                      border: `1.5px solid ${isSelected ? C.rust : C.border}`,
+                      background: isSelected ? C.rustBg : C.card,
+                      color: isSelected ? C.ink : C.ink2,
+                    }}
+                  >
+                    <span style={{ fontFamily: C.mono, fontWeight: 600 }}>
+                      {isSelected ? "● " : "○ "}{document.file_name || document.document_id}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* A project with documents but none of them read is stated as that, not as an empty
+          review: the service refuses with RECONSTRUCTION_NO_CAPTURE and the refusal band
+          below shows it verbatim. */}
+      {!loading && !refusal && doc && doc.documents.length > 0 && selectable.length === 0 && (
+        <div style={{ ...panel, marginBottom: 16 }}>
+          <div style={panelHead}><h3 style={{ fontSize: 14, fontWeight: 600 }}>Nothing to review yet</h3></div>
+          <div style={{ padding: "20px 24px", fontSize: 13, color: C.ink2, lineHeight: 1.65 }}>
+            This project holds {doc.documents.length} source document{doc.documents.length === 1 ? "" : "s"},
+            and none of them has been read yet, so there is no review of any of them. That is a statement about
+            the readings, not an empty review.
+          </div>
+        </div>
+      )}
+
+      {!loading && !refusal && doc?.revision_recorded && !doc.refusal_code && (!selectedDocumentId || selectedDocument) && (
         <>
           {outcome && (
             <div style={{ ...panel, marginBottom: 16, borderColor: outcome.failures.length > 0 ? C.border : C.rustBorder }}>

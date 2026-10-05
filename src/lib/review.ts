@@ -96,8 +96,22 @@ export interface ReviewConnection {
   };
 }
 
+/** One of the project's source documents, as the service states it.
+ *
+ *  `has_readings` is the service's own answer to "has anything read this document", and it
+ *  is the ONLY thing that makes a document selectable. It is not derived here from a
+ *  filename, a page count or a role — the service decides it, and this client repeats it. */
+export interface ReviewDocumentSummary {
+  document_id: string;
+  file_name: string | null;
+  has_readings: boolean;
+}
+
 export interface ReviewDocument {
   project_id: string;
+  /** The project's documents. A review is about ONE of them; when more than one carries
+   *  readings the service refuses to choose, and this list is what a choice is made from. */
+  documents: ReviewDocumentSummary[];
   /** The revision the service has RECORDED. This is the value a resolution must send
    *  back as `expected_revision`; it is never computed here. */
   revision: number;
@@ -231,8 +245,27 @@ export function openReview(projectId: string, token: string): Promise<ReviewOpen
 /** The project's review as structured data. Read-only: it records nothing, claims
  *  nothing, changes no revision and generates no artifact. A reconstruction that refused
  *  is reported in `refusal_code`/`refusal_detail` rather than as an empty review. */
-export function readReview(projectId: string, token: string): Promise<ReviewDocument> {
-  return call<ReviewDocument>(`/production/review/${projectId}/review`, token, { method: "GET" });
+export function readReview(
+  projectId: string,
+  token: string,
+  documentId?: string | null,
+): Promise<ReviewDocument> {
+  return call<ReviewDocument>(`/production/review/${projectId}/review${scopeQuery(documentId)}`, token, {
+    method: "GET",
+  });
+}
+
+/** The one place the document scope is put into a URL. Omitting it is the pre-existing
+ *  request: a project whose readings belong to one document behaves exactly as it did. */
+function scopeQuery(documentId?: string | null): string {
+  return documentId ? `?document_id=${encodeURIComponent(documentId)}` : "";
+}
+
+/** The documents that may be chosen for a review — those the service says carry readings.
+ *  A document nothing has read is not selectable, and is never silently dropped from the
+ *  list the reader sees; it is simply not offered as a review. */
+export function selectableDocuments(review: ReviewDocument | null): ReviewDocumentSummary[] {
+  return (review?.documents ?? []).filter((document) => document.has_readings);
 }
 
 /** Records one human review of one connection and delivers what it earns. */
@@ -242,9 +275,12 @@ export function resolveConnection(
   token: string,
   expectedRevision: number,
   resolutions: ResolutionEntry[],
+  documentId?: string | null,
 ): Promise<ResolutionOutcome> {
   return call<ResolutionOutcome>(
-    `/production/review/${projectId}/connections/${packageId}/resolve`,
+    // The SAME document scope the review was read under: a connection is never resolved
+    // against a project-wide reconstruction the review did not use.
+    `/production/review/${projectId}/connections/${packageId}/resolve${scopeQuery(documentId)}`,
     token,
     {
       method: "POST",
