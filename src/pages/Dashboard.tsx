@@ -1,33 +1,24 @@
 import { useState, useEffect, useCallback } from "react";
 import type { ReactNode } from "react";
-import { useNavigate } from "react-router-dom";
+import { NavLink, useNavigate } from "react-router-dom";
 import {
   Home, Folder, Upload, FileText, CreditCard, Settings,
-  BarChart3, Clock, Download, Lock, Check, X, Menu, LogOut,
+  BarChart3, Clock, Download, Check, X, Menu, LogOut,
 } from "lucide-react";
 import { theme as C } from "../lib/theme";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../lib/AuthContext";
+import { readProject, readProjects } from "../lib/projects";
+import type { Project } from "../lib/projects";
+import { Badge, EmptyState, ErrorState, FormatTag, LoadingState } from "../components/ui";
+import { btnGhost, btnRust, fmtDate, fmtTonnes, panel, panelHead } from "../lib/ui";
 import DrawingViewer from "../components/DrawingViewer";
 import ConnectionReviewSurface from "../components/ConnectionReviewSurface";
 
-// === TYPES (mirror the Supabase schema) ===
-type ProjectStatus = "processing" | "review" | "done" | "failed";
-
-interface Project {
-  id: string;
-  name: string | null;
-  engineer_reference: string | null;
-  client: string | null;
-  status: ProjectStatus;
-  total_members: number;
-  total_connections: number;
-  total_weight_tonnes: number;
-  source_format: string | null;
-  error_message: string | null;
-  report_pdf_path: string | null;
-  created_at: string;
-}
+// === TYPES ===
+// Project, its status vocabulary and the column set this build reads live in
+// ../lib/projects, shared with the project screens so the two cannot describe
+// the same row differently.
 
 interface Invoice {
   id: string;
@@ -39,28 +30,29 @@ interface Invoice {
   projects: { name: string | null; report_pdf_path: string | null } | null;
 }
 
-const BADGE: Record<ProjectStatus, [string, string, string]> = {
-  done: [C.green, C.greenBg, "Complete"],
-  processing: [C.amber, C.amberBg, "Processing"],
-  review: [C.blue, C.blueBg, "Needs review"],
-  failed: ["#c44", "#fbeaea", "Failed"],
-};
+// Dashboard, New Takeoff, Reports and Billing are the workspace views that still
+// live inside this page. Projects and Settings are real routes now, so they are
+// not part of this state.
+type View = "dashboard" | "upload" | "reports" | "billing";
 
-type View = "dashboard" | "projects" | "upload" | "reports" | "billing" | "settings";
-
-const fmtDate = (iso: string) =>
-  new Date(iso).toLocaleDateString("en-NZ", { day: "2-digit", month: "short", year: "numeric" });
-
-// === SHARED UI ===
-function Badge({ status }: { status: ProjectStatus }) {
-  const [fg, bg, label] = BADGE[status];
-  return (
-    <span style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "3px 10px", borderRadius: 20, fontSize: 11, fontWeight: 600, color: fg, background: bg }}>
-      <span style={{ width: 5, height: 5, borderRadius: "50%", background: fg }} />{label}
-    </span>
-  );
+// A takeoff attempt that did not finish, as the person who made it needs to see it.
+//
+// Everything here is a FRONTEND OBSERVATION about a request the page made or did not
+// make. Nothing in it is a statement about the project's persisted status: that column
+// is written by the backend and by nothing else, and a request that failed is not
+// evidence that a project failed.
+//
+// `projectId` is set only where a project row genuinely exists AND its file genuinely
+// reached storage. It is offered as a destination the reader can choose; the page never
+// navigates there on its own, because arriving at a project page is not the same thing
+// as extraction having started.
+interface UploadFailure {
+  stage: string;
+  message: string;
+  projectId: string | null;
 }
 
+// === SHARED UI ===
 function StatCard({ icon, label, val, sub }: { icon: ReactNode; label: string; val: string; sub: ReactNode }) {
   return (
     <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "18px 20px" }}>
@@ -72,14 +64,6 @@ function StatCard({ icon, label, val, sub }: { icon: ReactNode; label: string; v
       <div style={{ fontSize: 11.5, color: C.grey, marginTop: 3 }}>{sub}</div>
     </div>
   );
-}
-
-function fmtTag(f: string) {
-  return <span style={{ padding: "3px 10px", fontSize: 10, fontWeight: 600, letterSpacing: 1, borderRadius: 4, background: C.rustBg, color: C.rust, border: `1px solid ${C.rustBorder}` }}>.{f}</span>;
-}
-
-function EmptyState({ message }: { message: string }) {
-  return <div style={{ padding: "44px 20px", textAlign: "center", color: C.grey, fontSize: 13 }}>{message}</div>;
 }
 
 function ProjectsTable({ rows, onOpen, compact }: { rows: Project[]; onOpen: (p: Project) => void; compact?: boolean }) {
@@ -102,9 +86,9 @@ function ProjectsTable({ rows, onOpen, compact }: { rows: Project[]; onOpen: (p:
               <div style={{ fontSize: 11.5, color: C.grey, fontFamily: C.mono, marginTop: 1 }}>{p.engineer_reference || "—"}</div>
             </td>
             <td style={{ ...td, color: C.ink2 }}>{p.client || "—"}</td>
-            {!compact && <td style={td}>{p.source_format ? fmtTag(p.source_format) : "—"}</td>}
+            {!compact && <td style={td}>{p.source_format ? <FormatTag f={p.source_format} /> : "—"}</td>}
             <td style={{ ...td, fontFamily: C.mono, fontSize: 12 }}>{p.status === "processing" ? "—" : p.total_members}</td>
-            <td style={{ ...td, fontFamily: C.mono, fontSize: 12 }}>{p.status === "processing" ? "—" : `${p.total_weight_tonnes.toFixed(2)}t`}</td>
+            <td style={{ ...td, fontFamily: C.mono, fontSize: 12 }}>{p.status === "processing" ? "—" : fmtTonnes(p.total_weight_tonnes)}</td>
             <td style={td}><Badge status={p.status} /></td>
             <td style={{ ...td, textAlign: "right", color: C.grey, fontSize: 12 }}>{fmtDate(p.created_at)}</td>
           </tr>
@@ -114,7 +98,11 @@ function ProjectsTable({ rows, onOpen, compact }: { rows: Project[]; onOpen: (p:
   );
 }
 
-const ACCEPTED_EXTENSIONS = [".ifc", ".dwg", ".dxf", ".pdf"];
+// Only the formats the backend can actually extract today. DXF parsing and
+// PDF drawing vision are the two live paths; IFC is not implemented, and DWG
+// is not converted to DXF yet. The picker must not offer a path that does not
+// exist.
+const ACCEPTED_EXTENSIONS = [".dxf", ".pdf"];
 
 function UploadZone({ big, onFileSelected }: { big?: boolean; onFileSelected: (file: File) => void }) {
   const [drag, setDrag] = useState(false);
@@ -125,7 +113,7 @@ function UploadZone({ big, onFileSelected }: { big?: boolean; onFileSelected: (f
     const isValid = ACCEPTED_EXTENSIONS.some((ext) => file.name.toLowerCase().endsWith(ext));
     if (!isValid) {
       
-      setError(`"${file.name}" isn't supported. Upload an .IFC, .DWG, .DXF, or .PDF file.`);
+      setError(`"${file.name}" isn't supported yet. Upload a .DXF or .PDF file.`);
       return;
     }
     setError(null);
@@ -137,7 +125,7 @@ function UploadZone({ big, onFileSelected }: { big?: boolean; onFileSelected: (f
       <input
         id="ss-dash-file-input"
         type="file"
-        accept=".ifc,.dwg,.dxf,.pdf"
+        accept=".dxf,.pdf"
         onChange={(e) => { validate(e.target.files?.[0]); e.target.value = ""; }}
         style={{ display: "none" }}
       />
@@ -147,7 +135,7 @@ function UploadZone({ big, onFileSelected }: { big?: boolean; onFileSelected: (f
         onDrop={(e) => { e.preventDefault(); setDrag(false); validate(e.dataTransfer.files?.[0]); }}
         style={{
           margin: big ? 0 : 20, padding: big ? "52px 24px" : "34px 20px",
-          border: `1.5px dashed ${error ? "#c44" : drag ? C.rust : C.border}`, borderRadius: 10, textAlign: "center", cursor: "pointer",
+          border: `1.5px dashed ${error ? C.red : drag ? C.rust : C.border}`, borderRadius: 10, textAlign: "center", cursor: "pointer",
           background: drag ? C.rustBg : `repeating-linear-gradient(45deg,transparent,transparent 20px,rgba(196,99,58,.012) 20px,rgba(196,99,58,.012) 21px)`,
           transition: "all .25s",
         }}>
@@ -156,10 +144,10 @@ function UploadZone({ big, onFileSelected }: { big?: boolean; onFileSelected: (f
         </div>
         <div style={{ fontSize: 14.5, fontWeight: 600, marginBottom: 4 }}>Drop your structural file here</div>
         <div style={{ fontSize: 12.5, color: C.grey, marginBottom: 14 }}>or click to browse — we'll extract every member and connection</div>
-        <div style={{ display: "flex", gap: 7, justifyContent: "center" }}>{fmtTag("IFC")}{fmtTag("DWG")}{fmtTag("DXF")}{fmtTag("PDF")}</div>
+        <div style={{ display: "flex", gap: 7, justifyContent: "center" }}><FormatTag f="DXF" /><FormatTag f="PDF" /></div>
       </div>
       {error && (
-        <div style={{ margin: big ? "12px 0 0" : "12px 20px 0", padding: "10px 14px", background: "rgba(204,68,68,0.06)", border: "1px solid rgba(204,68,68,0.25)", borderRadius: 8, color: "#c44", fontSize: 12.5, textAlign: "left" }}>
+        <div style={{ margin: big ? "12px 0 0" : "12px 20px 0", padding: "10px 14px", background: "rgba(204,68,68,0.06)", border: `1px solid ${C.redBorder}`, borderRadius: 8, color: C.red, fontSize: 12.5, textAlign: "left" }}>
           {error}
         </div>
       )}
@@ -170,7 +158,7 @@ function UploadZone({ big, onFileSelected }: { big?: boolean; onFileSelected: (f
 // === MAIN DASHBOARD ===
 export default function Dashboard() {
   const navigate = useNavigate();
-  const { user, profile, signOut, session } = useAuth();
+  const { user, profile, signOut, session, loading: authLoading } = useAuth();
 
   const [view, setView] = useState<View>("dashboard");
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -182,34 +170,42 @@ export default function Dashboard() {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [loadingProjects, setLoadingProjects] = useState(true);
   const [loadingInvoices, setLoadingInvoices] = useState(true);
+  const [projectsError, setProjectsError] = useState<string | null>(null);
+  const [invoicesError, setInvoicesError] = useState<string | null>(null);
+  const [reportError, setReportError] = useState<string | null>(null);
 
   const [uploading, setUploading] = useState(false);
   const [uploadStage, setUploadStage] = useState("Uploading file...");
-  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [uploadFailure, setUploadFailure] = useState<UploadFailure | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-
-  const [payModal, setPayModal] = useState<{ id: string; name: string; ref: string; reportPath: string | null } | null>(null);
-  const [payProcessing, setPayProcessing] = useState(false);
-  const [paySuccess, setPaySuccess] = useState(false);
 
   // === DATA FETCHING ===
   const fetchProjects = useCallback(async () => {
     setLoadingProjects(true);
-    const { data, error } = await supabase
-      .from("projects")
-      .select("id, name, engineer_reference, client, status, total_members, total_connections, total_weight_tonnes, source_format, error_message, report_pdf_path, created_at")
-      .order("created_at", { ascending: false });
-    if (!error && data) setProjects(data as Project[]);
+    setProjectsError(null);
+    // The read is shared with the project screens so the dashboard and those
+    // pages cannot end up reading different column sets. It is surfaced, not
+    // swallowed: swallowing it left the table on its empty state, which reads
+    // as "you have no projects" rather than "the read failed" — two very
+    // different statements.
+    const { projects: rows, error } = await readProjects();
+    if (error) setProjectsError(error);
+    else setProjects(rows);
     setLoadingProjects(false);
   }, []);
 
   const fetchInvoices = useCallback(async () => {
     setLoadingInvoices(true);
+    setInvoicesError(null);
     const { data, error } = await supabase
       .from("invoices")
       .select("id, project_id, total_cents, status, payment_method, created_at, projects(name, report_pdf_path)")
       .order("created_at", { ascending: false });
-    if (!error && data) setInvoices(data as unknown as Invoice[]);
+    if (error) {
+      setInvoicesError("Your invoices could not be loaded.");
+    } else if (data) {
+      setInvoices(data as unknown as Invoice[]);
+    }
     setLoadingInvoices(false);
   }, []);
 
@@ -226,15 +222,16 @@ export default function Dashboard() {
     if (!modal || modal.status !== "processing") return;
 
     const interval = setInterval(async () => {
-      const { data, error } = await supabase
-        .from("projects")
-        .select("id, name, engineer_reference, client, status, total_members, total_connections, total_weight_tonnes, source_format, error_message, report_pdf_path, created_at")
-        .eq("id", modal.id)
-        .single();
+      // The same shared read the project screens use, so this poll cannot end up
+      // selecting a different column set from the rest of the dashboard. The
+      // behaviour is the one the inline query already had: a read that fails, or
+      // that finds no row, leaves the modal untouched — it only ever updated on a
+      // row it actually got back.
+      const { project } = await readProject(modal.id);
 
-      if (!error && data) {
-        setModal(data as Project);
-        setProjects((prev) => prev.map((p) => (p.id === data.id ? (data as Project) : p)));
+      if (project) {
+        setModal(project);
+        setProjects((prev) => prev.map((p) => (p.id === project.id ? project : p)));
       }
     }, 3000);
 
@@ -246,11 +243,11 @@ export default function Dashboard() {
     if (!user) return;
     setSelectedFile(file);
     setUploading(true);
-    setUploadError(null);
+    setUploadFailure(null);
     setUploadStage("Creating project...");
 
     const ext = file.name.split(".").pop()?.toUpperCase() ?? "";
-    const sourceFormat = ["IFC", "DWG", "DXF", "PDF"].includes(ext) ? ext : null;
+    const sourceFormat = ["DXF", "PDF"].includes(ext) ? ext : null;
     const displayName = file.name.replace(/\.[^/.]+$/, "");
 
     // 1. Create the project row
@@ -267,8 +264,12 @@ export default function Dashboard() {
       .single();
 
     if (insertError || !project) {
-      setUploadError(insertError?.message ?? "Couldn't create the project. Please try again.");
       setUploading(false);
+      setUploadFailure({
+        stage: "Upload failed",
+        message: insertError?.message ?? "Couldn't create the project. Please try again.",
+        projectId: null,
+      });
       return;
     }
 
@@ -278,51 +279,98 @@ export default function Dashboard() {
     const { error: uploadErr } = await supabase.storage.from("uploads").upload(storagePath, file);
 
     if (uploadErr) {
-      setUploadError(`File upload failed: ${uploadErr.message}`);
       setUploading(false);
+      setUploadFailure({
+        stage: "Upload failed",
+        message: `File upload failed: ${uploadErr.message}`,
+        projectId: null,
+      });
       return;
     }
 
     // 3. Record the storage path on the project
     await supabase.from("projects").update({ uploaded_file_path: storagePath }).eq("id", project.id);
 
-    // 4. Trigger extraction on the API service, if one is configured.
-    // Without this env var set, the project simply sits at "processing"
-    // until the API service is deployed (see steelspec-api/README.md).
+    // 4. Ask the API service to start the extraction.
+    //
+    // At this point the file IS in storage and the project row DOES exist, so a
+    // failure here is not a failed upload and is not reported as one. It is also
+    // not nothing: this request is the only thing that starts an extraction, so if
+    // it does not succeed then no extraction has started — and carrying on to the
+    // project page would show a project sitting at "Processing" under a line
+    // promising that it updates automatically. That promise is the thing removed
+    // here. When the trigger does not succeed the flow stops and says so.
+    //
+    // Nothing is retried, and NOTHING about the project row is written. A failed
+    // request is a fact about this page's request, not evidence that the project
+    // failed, so the persisted status is left exactly as the backend left it.
     const apiUrl = import.meta.env.VITE_API_URL;
     if (apiUrl) {
       setUploadStage("Starting extraction...");
       // The API authenticates the caller from the Supabase access token, sent as
       // a request header and nowhere else.
       const token = session?.access_token;
+      let triggerFailure: string | null = null;
       try {
-        await fetch(`${apiUrl}/extract/${project.id}`, {
+        const res = await fetch(`${apiUrl}/extract/${project.id}`, {
           method: "POST",
           headers: token ? { Authorization: `Bearer ${token}` } : {},
         });
+        // A refusal is as much a "not started" as an unreachable service is. The
+        // body is deliberately not read: what the service said about the refusal
+        // is its own to state, and this page does not re-word it.
+        if (!res.ok) {
+          triggerFailure = `Your file was uploaded, but the extraction service did not start an extraction (HTTP ${res.status}).`;
+        }
       } catch {
-        // Non-fatal — the project stays in "processing" and can be
-        // retried later once the API service is reachable.
+        triggerFailure = "Your file was uploaded, but the extraction service could not be reached, so no extraction was started.";
       }
+
+      if (triggerFailure) {
+        setUploading(false);
+        setUploadFailure({ stage: "Extraction not started", message: triggerFailure, projectId: project.id });
+        // The project row is real and belongs on the dashboard behind this modal,
+        // so the list is refreshed — the reader is not left hunting for it.
+        await fetchProjects();
+        return;
+      }
+    } else {
+      // No extraction service is configured for this build, so no extraction was
+      // started here either. The project row and the uploaded file both exist and
+      // are kept; what is not kept is the implication that work is under way.
+      setUploading(false);
+      setUploadFailure({
+        stage: "Extraction not started",
+        message: "Your file was uploaded, but this build has no extraction service configured, so no extraction was started.",
+        projectId: project.id,
+      });
+      await fetchProjects();
+      return;
     }
 
     setUploadStage("Upload complete");
     await fetchProjects();
     setUploading(false);
-    setView("projects");
-    setModal({ ...project, uploaded_file_path: storagePath } as Project);
+    // Land on the project that was just created — it is a page of its own now,
+    // and that page is where its analysis state is shown.
+    navigate(`/projects/${project.id}/overview`);
   };
 
-  const startPayment = (p: { id: string; name: string; ref: string; reportPath: string | null }) => { setPayModal(p); setPaySuccess(false); };
-
+  // The only route to a report. It reads the project's own report path, asks
+  // storage for a short-lived signed URL and hands the browser that URL. There is
+  // no step in front of it that charges anything, so there is none that could
+  // report a charge happening.
   const downloadReport = async (reportPath: string | null, projectName: string) => {
+    setReportError(null);
     if (!reportPath) {
-      alert("The report isn't ready yet — extraction may still be finishing. Try again in a moment.");
+      setReportError("The report isn't ready yet — extraction may still be finishing. Try again in a moment.");
       return;
     }
     const { data, error } = await supabase.storage.from("reports").createSignedUrl(reportPath, 60);
     if (error || !data) {
-      alert(`Couldn't retrieve the report: ${error?.message ?? "unknown error"}`);
+      // The raw storage error is not shown: it names internals and is not
+      // actionable to the person reading it.
+      setReportError("The report could not be retrieved. Please try again.");
       return;
     }
     // Open the signed URL — browsers will download or preview the PDF directly
@@ -333,7 +381,6 @@ export default function Dashboard() {
     link.click();
     document.body.removeChild(link);
   };
-  const confirmPayment = () => { setPayProcessing(true); setTimeout(() => { setPayProcessing(false); setPaySuccess(true); }, 1400); };
 
   const handleSignOut = async () => {
     await signOut();
@@ -342,25 +389,27 @@ export default function Dashboard() {
 
   const navItems: [View, string, ReactNode][] = [
     ["dashboard", "Dashboard", <Home size={17} strokeWidth={1.7} />],
-    ["projects", "Projects", <Folder size={17} strokeWidth={1.7} />],
     ["upload", "New Takeoff", <Upload size={17} strokeWidth={1.7} />],
     ["reports", "Reports", <FileText size={17} strokeWidth={1.7} />],
   ];
   const navItems2: [View, string, ReactNode][] = [
     ["billing", "Billing", <CreditCard size={17} strokeWidth={1.7} />],
-    ["settings", "Settings", <Settings size={17} strokeWidth={1.7} />],
+  ];
+  // Projects and Settings are pages of their own now, so the sidebar points at
+  // them by route instead of switching an in-page view.
+  const workspaceLinks: [string, string, ReactNode][] = [
+    ["/projects", "Projects", <Folder size={17} strokeWidth={1.7} />],
+  ];
+  const accountLinks: [string, string, ReactNode][] = [
+    ["/settings", "Settings", <Settings size={17} strokeWidth={1.7} />],
   ];
 
   const navItemStyle = (active: boolean): React.CSSProperties => ({
     display: "flex", alignItems: "center", gap: 11, padding: "9px 12px", borderRadius: 8,
     color: active ? C.rust : C.ink2, fontSize: 13.5, fontWeight: active ? 600 : 500, cursor: "pointer",
     border: "none", background: active ? C.rustBg : "none", width: "100%", textAlign: "left",
+    textDecoration: "none",
   });
-
-  const btnRust: React.CSSProperties = { display: "inline-flex", alignItems: "center", gap: 7, padding: "10px 18px", background: C.rust, color: "#fff", border: "none", borderRadius: 8, fontSize: 13.5, fontWeight: 600, cursor: "pointer" };
-  const btnGhost: React.CSSProperties = { display: "inline-flex", alignItems: "center", gap: 7, padding: "10px 16px", background: C.card, color: C.ink2, border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 13, fontWeight: 500, cursor: "pointer" };
-  const panel: React.CSSProperties = { background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, overflow: "hidden" };
-  const panelHead: React.CSSProperties = { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "16px 20px", borderBottom: `1px solid ${C.borderLight}` };
 
   // === DERIVED STATS ===
   const doneProjects = projects.filter((p) => p.status === "done");
@@ -403,17 +452,23 @@ export default function Dashboard() {
             {navItems.map(([k, l, ic]) => (
               <button key={k} style={navItemStyle(view === k)} onClick={() => { setView(k); setSidebarOpen(false); }}>{ic}{l}</button>
             ))}
+            {workspaceLinks.map(([to, l, ic]) => (
+              <NavLink key={to} to={to} onClick={() => setSidebarOpen(false)} style={({ isActive }) => navItemStyle(isActive)}>{ic}{l}</NavLink>
+            ))}
             <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: 1.5, textTransform: "uppercase", color: C.greyLight, padding: "14px 12px 6px" }}>Account</div>
             {navItems2.map(([k, l, ic]) => (
               <button key={k} style={navItemStyle(view === k)} onClick={() => { setView(k); setSidebarOpen(false); }}>{ic}{l}</button>
+            ))}
+            {accountLinks.map(([to, l, ic]) => (
+              <NavLink key={to} to={to} onClick={() => setSidebarOpen(false)} style={({ isActive }) => navItemStyle(isActive)}>{ic}{l}</NavLink>
             ))}
           </div>
           <div style={{ padding: 16, borderTop: `1px solid ${C.borderLight}` }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10, padding: 8, borderRadius: 8 }}>
               <div style={{ width: 32, height: 32, borderRadius: "50%", background: C.rustBg, color: C.rust, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 13, border: `1px solid ${C.rustBorder}`, flexShrink: 0 }}>{initials}</div>
               <div style={{ minWidth: 0, flex: 1 }}>
-                <div style={{ fontSize: 13, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{profile?.full_name || "Your account"}</div>
-                <div style={{ fontSize: 11, color: C.grey, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{profile?.company_name || user?.email}</div>
+                <div style={{ fontSize: 13, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{authLoading && !profile ? "Loading profile…" : profile?.full_name || "Your account"}</div>
+                <div style={{ fontSize: 11, color: C.grey, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{authLoading && !profile ? "" : profile?.company_name || user?.email}</div>
               </div>
               <button onClick={handleSignOut} title="Sign out" style={{ background: "none", border: "none", color: C.grey, cursor: "pointer", padding: 4, flexShrink: 0 }}>
                 <LogOut size={16} />
@@ -436,32 +491,25 @@ export default function Dashboard() {
                 <button style={btnRust} onClick={() => setView("upload")}><Upload size={15} /> New Takeoff</button>
               </div>
 
+              {/* A figure that has not been read yet is shown as "—", never as 0.
+                  Zero is a real answer ("you have no projects") and a loading
+                  dashboard must not give it before the read has come back. */}
               <div className="ss-dash-stats" style={{ marginBottom: 24 }}>
-                <StatCard icon={<Folder size={17} />} label="Active projects" val={String(projects.length)} sub={loadingProjects ? "Loading…" : `${doneProjects.length} completed`} />
-                <StatCard icon={<BarChart3 size={17} />} label="Total tonnage" val={`${totalTonnage.toFixed(2)}t`} sub="across completed projects" />
-                <StatCard icon={<FileText size={17} />} label="Reports paid" val={String(paidInvoices.length)} sub="downloaded schedules" />
-                <StatCard icon={<Clock size={17} />} label="Account" val={profile?.plan === "workshop" ? "Workshop" : "Pay as you go"} sub={user?.email || ""} />
+                <StatCard icon={<Folder size={17} />} label="Active projects" val={loadingProjects ? "—" : String(projects.length)} sub={loadingProjects ? "Loading…" : `${doneProjects.length} with analysis complete`} />
+                <StatCard icon={<BarChart3 size={17} />} label="Total tonnage" val={loadingProjects ? "—" : fmtTonnes(totalTonnage)} sub={loadingProjects ? "Loading…" : "across projects with analysis complete"} />
+                <StatCard icon={<FileText size={17} />} label="Reports paid" val={loadingInvoices ? "—" : String(paidInvoices.length)} sub={loadingInvoices ? "Loading…" : "downloaded schedules"} />
+                <StatCard icon={<Clock size={17} />} label="Account" val={authLoading && !profile ? "—" : profile?.plan === "workshop" ? "Workshop" : "Pay as you go"} sub={user?.email || ""} />
               </div>
 
               <div className="ss-dash-grid2">
                 <div style={panel}>
-                  <div style={panelHead}><h3 style={{ fontSize: 14, fontWeight: 600 }}>Recent projects</h3><button style={{ fontSize: 12, color: C.rust, fontWeight: 600, background: "none", border: "none", cursor: "pointer" }} onClick={() => setView("projects")}>View all →</button></div>
-                  {loadingProjects ? <EmptyState message="Loading projects…" /> : <ProjectsTable rows={projects.slice(0, 5)} onOpen={setModal} compact />}
+                  <div style={panelHead}><h3 style={{ fontSize: 14, fontWeight: 600 }}>Recent projects</h3><button style={{ fontSize: 12, color: C.rust, fontWeight: 600, background: "none", border: "none", cursor: "pointer" }} onClick={() => navigate("/projects")}>View all →</button></div>
+                  {loadingProjects ? <LoadingState message="Loading projects…" /> : projectsError ? <ErrorState message={projectsError} onRetry={fetchProjects} /> : <ProjectsTable rows={projects.slice(0, 5)} onOpen={setModal} compact />}
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
                   <div style={panel}><div style={panelHead}><h3 style={{ fontSize: 14, fontWeight: 600 }}>Quick takeoff</h3></div><UploadZone onFileSelected={handleFileSelected} /></div>
                 </div>
               </div>
-            </>
-          )}
-
-          {view === "projects" && (
-            <>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "20px 0 24px", flexWrap: "wrap", gap: 16 }}>
-                <div><h1 style={{ fontSize: 21, fontWeight: 700 }}>Projects</h1><p style={{ fontSize: 13, color: C.grey, marginTop: 2 }}>All takeoffs across your workspace.</p></div>
-                <button style={btnRust} onClick={() => setView("upload")}><Upload size={15} /> New Takeoff</button>
-              </div>
-              <div style={panel}>{loadingProjects ? <EmptyState message="Loading projects…" /> : <ProjectsTable rows={projects} onOpen={setModal} />}</div>
             </>
           )}
 
@@ -471,7 +519,7 @@ export default function Dashboard() {
               <div style={{ ...panel, padding: 24 }}>
                 <UploadZone big onFileSelected={handleFileSelected} />
                 <div className="ss-upload-info-grid" style={{ marginTop: 20 }}>
-                  {[["IFC / BIM", "Highest accuracy — direct from Revit, Tekla, or ArchiCAD."], ["DWG / DXF", "CAD drawings — extraction with a quick review step."], ["PDF", "Structural drawings analysed page-by-page, with every value traceable back to its source page."]].map(([t, d], i) => (
+                  {[["DXF", "CAD drawings — members and connections parsed directly, with a quick review step."], ["PDF", "Structural drawings analysed page-by-page, with every value traceable back to its source page."]].map(([t, d], i) => (
                     <div key={i} style={{ padding: "14px 16px", background: C.bg, borderRadius: 10, border: `1px solid ${C.borderLight}` }}>
                       <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4, color: C.rust }}>{t}</div>
                       <div style={{ fontSize: 12, color: C.grey, lineHeight: 1.55 }}>{d}</div>
@@ -489,8 +537,11 @@ export default function Dashboard() {
             <>
               <div style={{ padding: "20px 0 24px" }}><h1 style={{ fontSize: 21, fontWeight: 700 }}>Reports</h1><p style={{ fontSize: 13, color: C.grey, marginTop: 2 }}>Download previously generated documents.</p></div>
               <div style={panel}>
-                {loadingInvoices ? <EmptyState message="Loading reports…" /> : paidInvoices.length === 0 ? (
-                  <EmptyState message="No paid reports yet — unlock a report from a completed project to see it here." />
+                {/* The empty line below used to read "unlock a report from a
+                    completed project" — a purchase step that does not exist and
+                    a completion state stronger than the product supports. */}
+                {loadingInvoices ? <LoadingState message="Loading reports…" /> : invoicesError ? <ErrorState message={invoicesError} onRetry={fetchInvoices} /> : paidInvoices.length === 0 ? (
+                  <EmptyState message="No reports yet — a report appears here once it has been paid for. Billing is not available yet." />
                 ) : (
                   <div style={{ overflowX: "auto" }}><table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
                     <thead><tr>
@@ -519,7 +570,11 @@ export default function Dashboard() {
 
           {view === "billing" && (
             <>
-              <div style={{ padding: "20px 0 24px" }}><h1 style={{ fontSize: 21, fontWeight: 700 }}>Billing</h1><p style={{ fontSize: 13, color: C.grey, marginTop: 2 }}>Manage your plan, payment methods, and invoice history.</p></div>
+              {/* The page opens by saying what is true of the whole view. Everything below —
+                  the prices, the plan features, the "CURRENT" badge — is read as intent once
+                  this sentence is in front of it, which is what lets the plan cards keep
+                  their information without claiming anything is purchasable today. */}
+              <div style={{ padding: "20px 0 24px" }}><h1 style={{ fontSize: 21, fontWeight: 700 }}>Billing</h1><p style={{ fontSize: 13, color: C.grey, marginTop: 2 }}>Payment is not available yet. The plans below are what we intend to offer.</p></div>
 
               <div style={{ ...panel, padding: "24px 24px 28px", marginBottom: 16 }}>
                 <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 16 }}>Plan</h3>
@@ -528,8 +583,8 @@ export default function Dashboard() {
                     {profile?.plan !== "workshop" && <span style={{ position: "absolute", top: -9, left: 18, background: C.rust, color: "#fff", fontSize: 10, fontWeight: 700, letterSpacing: 0.5, padding: "2px 10px", borderRadius: 20 }}>CURRENT</span>}
                     <div style={{ fontSize: 13, fontWeight: 600, color: C.grey, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>Pay as you go</div>
                     <div style={{ fontSize: 26, fontWeight: 700, letterSpacing: -0.5 }}>$199<span style={{ fontSize: 13, fontWeight: 500, color: C.grey }}> /takeoff</span></div>
-                    <div style={{ fontSize: 12.5, color: C.grey, margin: "8px 0 16px", lineHeight: 1.5 }}>Billed only when you download a report. No commitment, no monthly fee.</div>
-                    {["Steel schedule + connections PDF", "Unlimited uploads & review", "Pay only for what you download"].map((f) => (
+                    <div style={{ fontSize: 12.5, color: C.grey, margin: "8px 0 16px", lineHeight: 1.5 }}>No monthly fee and no commitment. Billing is not available yet.</div>
+                    {["Steel schedule + connections PDF", "Unlimited uploads & review", "Priced per report, once billing is available"].map((f) => (
                       <div key={f} style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 12.5, color: C.ink2, marginBottom: 7 }}><Check size={13} color={C.rust} />{f}</div>
                     ))}
                   </div>
@@ -541,7 +596,16 @@ export default function Dashboard() {
                     {["Unlimited takeoffs & downloads", "Priority processing", "Team seats (coming soon)"].map((f) => (
                       <div key={f} style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 12.5, color: C.ink2, marginBottom: 7 }}><Check size={13} color={C.rust} />{f}</div>
                     ))}
-                    {profile?.plan !== "workshop" && <button style={{ ...btnGhost, marginTop: 10, width: "100%", justifyContent: "center" }}>Switch to Workshop</button>}
+                    {/* Nothing in the product changes a plan: no provider is wired up and no
+                        code writes `profiles.plan`. The card keeps its plan information and
+                        the control keeps its place, but it is disabled and says so, using the
+                        same treatment the BlinkPay row below already uses. */}
+                    {profile?.plan !== "workshop" && (
+                      <button disabled style={{ ...btnGhost, marginTop: 10, width: "100%", justifyContent: "center", opacity: 0.5, cursor: "not-allowed" }}>
+                        Switch to Workshop
+                        <span style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: 0.6, padding: "2px 7px", borderRadius: 10, background: C.borderLight, color: C.grey, textTransform: "uppercase" }}>Coming soon</span>
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
@@ -551,9 +615,15 @@ export default function Dashboard() {
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 18px", border: `1px solid ${C.border}`, borderRadius: 10, marginBottom: 12 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                     <div style={{ width: 40, height: 40, borderRadius: 9, background: C.borderLight, color: C.ink2, display: "flex", alignItems: "center", justifyContent: "center" }}><CreditCard size={17} /></div>
-                    <div><div style={{ fontWeight: 600, fontSize: 13.5 }}>No card on file</div><div style={{ fontSize: 12, color: C.grey }}>Add a card to unlock reports</div></div>
+                    <div>
+                      <div style={{ fontWeight: 600, fontSize: 13.5, display: "flex", alignItems: "center", gap: 8 }}>No card on file <span style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: 0.6, padding: "2px 7px", borderRadius: 10, background: C.borderLight, color: C.grey, textTransform: "uppercase" }}>Coming soon</span></div>
+                      {/* Reports are governed by whether the project carries a stored
+                          report, and by nothing else — no card is involved in reaching
+                          one. The old line here claimed the opposite. */}
+                      <div style={{ fontSize: 12, color: C.grey }}>Card payments are not available yet.</div>
+                    </div>
                   </div>
-                  <button style={{ ...btnGhost, padding: "6px 12px", fontSize: 12 }}>Add card</button>
+                  <button disabled style={{ ...btnGhost, padding: "6px 12px", fontSize: 12, opacity: 0.5, cursor: "not-allowed" }}>Add card</button>
                 </div>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 18px", border: `1px solid ${C.border}`, borderRadius: 10, opacity: 0.7 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
@@ -569,7 +639,7 @@ export default function Dashboard() {
 
               <div style={panel}>
                 <div style={panelHead}><h3 style={{ fontSize: 14, fontWeight: 600 }}>Invoice history</h3></div>
-                {loadingInvoices ? <EmptyState message="Loading invoices…" /> : invoices.length === 0 ? (
+                {loadingInvoices ? <LoadingState message="Loading invoices…" /> : invoicesError ? <ErrorState message={invoicesError} onRetry={fetchInvoices} /> : invoices.length === 0 ? (
                   <EmptyState message="No invoices yet." />
                 ) : (
                   <div style={{ overflowX: "auto" }}><table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
@@ -597,19 +667,6 @@ export default function Dashboard() {
             </>
           )}
 
-          {view === "settings" && (
-            <>
-              <div style={{ padding: "20px 0 24px" }}><h1 style={{ fontSize: 21, fontWeight: 700 }}>Settings</h1><p style={{ fontSize: 13, color: C.grey, marginTop: 2 }}>Workspace preferences.</p></div>
-              <div style={{ ...panel, padding: 32 }}>
-                <div style={{ display: "flex", flexDirection: "column", gap: 16, maxWidth: 420 }}>
-                  <div><div style={{ fontSize: 11, color: C.grey, textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 4 }}>Email</div><div style={{ fontSize: 14, fontWeight: 600 }}>{user?.email}</div></div>
-                  <div><div style={{ fontSize: 11, color: C.grey, textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 4 }}>Full name</div><div style={{ fontSize: 14, fontWeight: 600 }}>{profile?.full_name || "—"}</div></div>
-                  <div><div style={{ fontSize: 11, color: C.grey, textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 4 }}>Company</div><div style={{ fontSize: 14, fontWeight: 600 }}>{profile?.company_name || "—"}</div></div>
-                  <button onClick={handleSignOut} style={{ ...btnGhost, marginTop: 8, width: "fit-content" }}><LogOut size={15} /> Sign out</button>
-                </div>
-              </div>
-            </>
-          )}
         </main>
 
         {/* PROJECT DETAIL MODAL */}
@@ -631,7 +688,7 @@ export default function Dashboard() {
                     ["Source format", modal.source_format ? `.${modal.source_format}` : "—"],
                     ["Steel members", modal.status === "processing" ? "—" : modal.total_members],
                     ["Connections", modal.status === "processing" ? "—" : modal.total_connections],
-                    ["Total tonnage", modal.status === "processing" ? "—" : `${modal.total_weight_tonnes.toFixed(2)} t`],
+                    ["Total tonnage", modal.status === "processing" ? "—" : fmtTonnes(modal.total_weight_tonnes)],
                   ].map(([l, v], i) => (
                     <div key={i} style={{ padding: "10px 14px", background: C.bg, borderRadius: 8, border: `1px solid ${C.borderLight}` }}>
                       <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: 0.8, color: C.grey }}>{l}</div>
@@ -640,10 +697,30 @@ export default function Dashboard() {
                   ))}
                 </div>
                 {modal.status === "done" || modal.status === "review" ? (
-                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                    <button style={btnRust} onClick={() => { setModal(null); startPayment({ id: modal.id, name: modal.name || "Untitled project", ref: modal.engineer_reference || "", reportPath: modal.report_pdf_path }); }}><Lock size={13} /> Unlock PDF — $199</button>
+                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+                    {/* The report action is offered only where this project actually
+                        has a report. Where it does not, nothing is offered: no price,
+                        no purchase, no generation, no readiness — a statement about
+                        the row, and no button to press. */}
+                    {modal.report_pdf_path ? (
+                      <button style={btnRust} onClick={() => downloadReport(modal.report_pdf_path, modal.name || "steel-schedule")}><Download size={13} /> Download report</button>
+                    ) : (
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 7, padding: "10px 16px", background: C.bg, color: C.grey, border: `1px solid ${C.borderLight}`, borderRadius: 8, fontSize: 13, fontWeight: 500 }}>
+                        <FileText size={13} /> Report not available yet
+                      </span>
+                    )}
                     <button style={btnGhost} onClick={() => setViewerProjectId(modal.id)}>View extraction</button>
                     <button style={btnGhost} onClick={() => setReviewProjectId(modal.id)}>Review extraction</button>
+                    {/* The project's own page, alongside the in-place actions rather
+                        than instead of them. This is the same navigation the projects
+                        list and the post-upload redirect already use, so the modal
+                        stays exactly what it was and simply gains a way out of it. */}
+                    <button style={btnGhost} onClick={() => { setModal(null); navigate(`/projects/${modal.id}/overview`); }}>Open project</button>
+                    {!modal.report_pdf_path && (
+                      <div style={{ flexBasis: "100%", fontSize: 12, color: C.grey, lineHeight: 1.55 }}>
+                        This project has no report stored against it yet, so there is nothing to download here.
+                      </div>
+                    )}
                   </div>
                 ) : modal.status === "processing" ? (
                   <div style={{ textAlign: "center", color: C.grey, fontSize: 13, padding: "20px 0", display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
@@ -651,8 +728,22 @@ export default function Dashboard() {
                     Extraction in progress — this updates automatically, no need to refresh.
                   </div>
                 ) : (
-                  <div style={{ textAlign: "center", color: "#c44", fontSize: 13, padding: "20px 0" }}>
+                  <div style={{ textAlign: "center", color: C.red, fontSize: 13, padding: "20px 0" }}>
                     Extraction failed{modal.error_message ? `: ${modal.error_message}` : ". Please try uploading again."}
+                  </div>
+                )}
+
+                {/* The same way out the finished state already offers, for the two
+                    states that had none. It is additive — it sits below whatever the
+                    state is showing and moves nothing above it. Nothing here
+                    navigates on its own: leaving this modal for the project page is
+                    the reader's action, and until they take it the extraction is
+                    still running (or has failed) exactly as it was. The project page
+                    polls for itself while a project is processing, so following this
+                    does not strand anyone on a stale reading. */}
+                {(modal.status === "processing" || modal.status === "failed") && (
+                  <div style={{ display: "flex", justifyContent: "center" }}>
+                    <button style={btnGhost} onClick={() => { setModal(null); navigate(`/projects/${modal.id}/overview`); }}>Open project</button>
                   </div>
                 )}
               </div>
@@ -670,81 +761,46 @@ export default function Dashboard() {
           <ConnectionReviewSurface projectId={reviewProjectId} onClose={() => setReviewProjectId(null)} />
         )}
 
-        {/* UPLOAD PROGRESS MODAL */}
-        {uploading && (
+        {/* UPLOAD PROGRESS MODAL — progress while a takeoff is running, and the
+            outcome when it stopped. The failure state is the same panel with the
+            spinner replaced by the reason: no green, no tick, nothing that reads as
+            a finished job. */}
+        {(uploading || uploadFailure) && (
           <div style={{ position: "fixed", inset: 0, background: "rgba(26,26,26,.45)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
             <div style={{ background: C.card, borderRadius: 14, maxWidth: 380, width: "100%", textAlign: "center", padding: "36px 28px" }}>
               <div style={{ fontSize: 12, fontWeight: 700, color: C.rust, letterSpacing: 3, marginBottom: 24 }}>STEELSPEC</div>
-              <div style={{ width: 44, height: 44, borderRadius: "50%", border: `2.5px solid ${C.border}`, borderTopColor: C.rust, animation: "spin 1s linear infinite", margin: "0 auto 18px" }} />
-              <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 3 }}>{uploadStage}</div>
+              {uploading && (
+                <div style={{ width: 44, height: 44, borderRadius: "50%", border: `2.5px solid ${C.border}`, borderTopColor: C.rust, animation: "spin 1s linear infinite", margin: "0 auto 18px" }} />
+              )}
+              <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 3, color: uploadFailure ? C.red : C.ink }}>
+                {uploadFailure ? uploadFailure.stage : uploadStage}
+              </div>
               <div style={{ fontSize: 12.5, color: C.grey }}>{selectedFile?.name}</div>
-              {uploadError && (
-                <div style={{ marginTop: 16, padding: "10px 14px", background: "rgba(204,68,68,0.06)", border: "1px solid rgba(204,68,68,0.25)", borderRadius: 8, color: "#c44", fontSize: 12.5, textAlign: "left" }}>
-                  {uploadError}
+              {uploadFailure && (
+                <div style={{ marginTop: 16, padding: "10px 14px", background: "rgba(204,68,68,0.06)", border: `1px solid ${C.redBorder}`, borderRadius: 8, color: C.red, fontSize: 12.5, textAlign: "left" }}>
+                  {uploadFailure.message}
+                </div>
+              )}
+              {uploadFailure && (
+                <div style={{ display: "flex", gap: 8, justifyContent: "center", marginTop: 18 }}>
+                  <button style={btnGhost} onClick={() => setUploadFailure(null)}>Close</button>
+                  {/* Offered only where a project row and its uploaded file genuinely
+                      exist. It is a destination the reader chooses — the page does not
+                      take them there, because arriving at a project page is not the
+                      same thing as an extraction having started. */}
+                  {uploadFailure.projectId && (
+                    <button style={btnGhost} onClick={() => { const id = uploadFailure.projectId; setUploadFailure(null); navigate(`/projects/${id}/overview`); }}>Open project</button>
+                  )}
                 </div>
               )}
             </div>
           </div>
         )}
 
-        {/* PAYMENT MODAL */}
-        {payModal && (
-          <div onClick={() => !payProcessing && setPayModal(null)} style={{ position: "fixed", inset: 0, background: "rgba(26,26,26,.45)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", padding: 24, backdropFilter: "blur(3px)" }}>
-            <div onClick={(e) => e.stopPropagation()} style={{ background: C.card, borderRadius: 14, maxWidth: 420, width: "100%", boxShadow: "0 24px 70px rgba(0,0,0,.18)" }}>
-              {!paySuccess ? (
-                <>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", padding: "24px 24px 0" }}>
-                    <div>
-                      <div style={{ fontSize: 11, color: C.rust, fontWeight: 600, letterSpacing: 1, textTransform: "uppercase", marginBottom: 3 }}>Unlock report</div>
-                      <h2 style={{ fontSize: 18, fontWeight: 700 }}>Complete payment</h2>
-                    </div>
-                    {!payProcessing && <button onClick={() => setPayModal(null)} style={{ background: "none", border: "none", fontSize: 20, color: C.grey, cursor: "pointer" }}><X size={20} /></button>}
-                  </div>
-                  <div style={{ padding: "20px 24px 24px" }}>
-                    <div style={{ background: C.bg, border: `1px solid ${C.borderLight}`, borderRadius: 10, padding: "16px 18px", margin: "16px 0" }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, padding: "5px 0", color: C.ink2 }}><span>{payModal.name}</span><span>{payModal.ref}</span></div>
-                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, padding: "5px 0", color: C.ink2 }}><span>Steel schedule + connection PDF</span><span>$199.00</span></div>
-                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, padding: "5px 0", color: C.ink2 }}><span>GST (15%)</span><span>$29.85</span></div>
-                      <div style={{ display: "flex", justifyContent: "space-between", fontWeight: 700, fontSize: 15, borderTop: `1px solid ${C.border}`, marginTop: 6, paddingTop: 10 }}><span>Total</span><span>$228.85</span></div>
-                    </div>
-
-                    <div style={{ fontSize: 11.5, fontWeight: 600, color: C.grey, textTransform: "uppercase", letterSpacing: 0.6, margin: "18px 0 10px" }}>Pay with</div>
-
-                    <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 16px", border: `1.5px solid ${C.rust}`, background: C.rustBg, borderRadius: 10, marginBottom: 10, cursor: "pointer" }}>
-                      <div style={{ width: 18, height: 18, borderRadius: "50%", border: `2px solid ${C.rust}`, position: "relative", flexShrink: 0 }}>
-                        <div style={{ position: "absolute", inset: 3, borderRadius: "50%", background: C.rust }} />
-                      </div>
-                      <div style={{ width: 32, height: 32, borderRadius: 8, background: C.borderLight, color: C.ink2, display: "flex", alignItems: "center", justifyContent: "center" }}><CreditCard size={16} /></div>
-                      <div style={{ flex: 1 }}><div style={{ fontWeight: 600, fontSize: 13.5 }}>Card on file</div><div style={{ fontSize: 11.5, color: C.grey }}>Demo payment</div></div>
-                    </div>
-
-                    <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 16px", border: `1.5px solid ${C.border}`, borderRadius: 10, opacity: 0.55, cursor: "not-allowed" }}>
-                      <div style={{ width: 18, height: 18, borderRadius: "50%", border: `2px solid ${C.border}`, flexShrink: 0 }} />
-                      <div style={{ width: 32, height: 32, borderRadius: 8, background: "#e8f3ef", color: "#1a7a5e", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 11 }}>BP</div>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontWeight: 600, fontSize: 13.5, display: "flex", alignItems: "center", gap: 7 }}>BlinkPay <span style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: 0.6, padding: "2px 7px", borderRadius: 10, background: C.borderLight, color: C.grey, textTransform: "uppercase" }}>Coming soon</span></div>
-                        <div style={{ fontSize: 11.5, color: C.grey }}>Pay from your bank — no card fees</div>
-                      </div>
-                    </div>
-
-                    <button onClick={confirmPayment} disabled={payProcessing} style={{ ...btnRust, width: "100%", justifyContent: "center", marginTop: 16, padding: "12px 20px", fontSize: 14 }}>
-                      {payProcessing ? "Processing…" : <><Lock size={14} /> Pay $228.85 &amp; download</>}
-                    </button>
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, marginTop: 12, fontSize: 11, color: C.grey }}>
-                      <Lock size={11} /> Payments are encrypted and PCI compliant
-                    </div>
-                  </div>
-                </>
-              ) : (
-                <div style={{ padding: "40px 32px", textAlign: "center" }}>
-                  <div style={{ width: 52, height: 52, borderRadius: "50%", background: C.greenBg, color: C.green, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 16px" }}><Check size={24} /></div>
-                  <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 6 }}>Payment successful</h2>
-                  <div style={{ fontSize: 13, color: C.grey, marginBottom: 24 }}>Your report for {payModal.name} is ready.</div>
-                  <button style={{ ...btnRust, width: "100%", justifyContent: "center", padding: "12px 20px", fontSize: 14 }} onClick={() => { downloadReport(payModal.reportPath, payModal.name); setPayModal(null); }}><Download size={15} /> Download PDF</button>
-                  <button style={{ ...btnGhost, width: "100%", justifyContent: "center", marginTop: 8, padding: "10px 20px", fontSize: 13 }} onClick={() => setPayModal(null)}>Close</button>
-                </div>
-              )}
-            </div>
+        {/* REPORT DOWNLOAD FAILURE — surfaced as a message, not a native alert() */}
+        {reportError && (
+          <div onClick={() => setReportError(null)} style={{ position: "fixed", bottom: 24, left: "50%", transform: "translateX(-50%)", zIndex: 300, background: C.redBg, border: "1px solid rgba(204,68,68,0.3)", color: C.red, padding: "12px 18px", borderRadius: 10, fontSize: 12.5, boxShadow: "0 12px 32px rgba(0,0,0,0.14)", cursor: "pointer", maxWidth: 460, textAlign: "center" }}>
+            {reportError}
           </div>
         )}
       </div>

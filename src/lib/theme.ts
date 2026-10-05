@@ -28,8 +28,13 @@ export const theme = {
   rustBorder: "#eeddd3",
   ink: "#1a1a1a",
   ink2: "#444444",
-  grey: "#8a857e",
-  greyLight: "#b5b0a8",
+  // Contrast pass: the previous pair (#8a857e / #b5b0a8) sat at roughly 3.5:1
+  // and 2.1:1 on the card and page backgrounds, both under the 4.5:1 WCAG AA
+  // needs for the 10–13px text these carry. The ramp is shifted down one step,
+  // keeping the same warm hue and the same two tiers: `grey` now clears AA on
+  // both #ffffff and #faf9f7, and `greyLight` is a quiet label tone.
+  grey: "#767068",
+  greyLight: "#8a857e",
   bg: "#faf9f7",
   card: "#ffffff",
   border: "#e9e5df",
@@ -42,6 +47,12 @@ export const theme = {
   amberBg: "#faf4e6",
   blue: "#2d5f8a",
   blueBg: "#ecf2f8",
+
+  // Error red. Same values the app already used as literals (#c44 expands to
+  // #cc4444), named here so an error state cannot drift into a different red.
+  red: "#cc4444",
+  redBg: "#fbeaea",
+  redBorder: "rgba(204,68,68,0.25)",
 
   mono: "'SF Mono','Fira Code','Cascadia Code',monospace",
 } as const;

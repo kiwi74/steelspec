@@ -6,7 +6,6 @@ import {
   BarChart3, Zap, ChevronDown, Check, Menu, X,
 } from "lucide-react";
 import { theme as C } from "../lib/theme";
-import { FloatingInput } from "../components/FloatingInput";
 import Footer from "../components/Footer";
 
 // === HOOKS ===
@@ -36,6 +35,12 @@ function Counter({ end, suffix = "", duration = 2000 }: { end: number; suffix?: 
   const [ref, inView] = useInView();
   useEffect(() => {
     if (!inView) return;
+    // The count-up is decoration. Where motion is reduced the figure is simply
+    // shown, rather than animated towards over two seconds.
+    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
+      setCount(end);
+      return;
+    }
     let start = 0;
     const step = end / (duration / 16);
     const timer = setInterval(() => {
@@ -62,7 +67,7 @@ function ScrollProgress() {
   }, []);
   return (
     <div style={{ position: "fixed", top: 0, left: 0, right: 0, height: 2, zIndex: 200 }}>
-      <div style={{ height: "100%", width: `${progress}%`, background: `linear-gradient(90deg, ${C.rustDark}, ${C.rustLight}, ${C.rust})`, transition: "width 0.1s linear" }} />
+      <div className="ss-scroll-progress" style={{ height: "100%", width: `${progress}%`, background: `linear-gradient(90deg, ${C.rustDark}, ${C.rustLight}, ${C.rust})`, transition: "width 0.1s linear" }} />
     </div>
   );
 }
@@ -74,7 +79,9 @@ function Reveal({ children, delay = 0, direction = "up" }: { children: ReactNode
     left: "translateX(32px)", right: "translateX(-32px)", scale: "scale(0.96)",
   };
   return (
-    <div ref={ref} style={{
+    // .ss-reveal is what the reduced-motion rule hooks: it forces the content
+    // visible and removes the transition, so nothing is left at opacity 0.
+    <div ref={ref} className="ss-reveal" style={{
       opacity: inView ? 1 : 0,
       transform: inView ? "none" : transforms[direction],
       transition: `opacity 0.7s cubic-bezier(0.16,1,0.3,1) ${delay}s, transform 0.7s cubic-bezier(0.16,1,0.3,1) ${delay}s`,
@@ -136,17 +143,17 @@ function SteelFrame() {
           <line x1="48" y1="64" x2="252" y2="260" stroke="rgba(196,99,58,0.35)" strokeWidth="1.5" strokeDasharray="4 3" />
           <line x1="252" y1="64" x2="48" y2="260" stroke="rgba(196,99,58,0.35)" strokeWidth="1.5" strokeDasharray="4 3" />
         </svg>
-        <div style={glowStyle(47, 30, 0)} />
-        <div style={glowStyle(47, 252, 0.8)} />
-        <div style={{ ...glowStyle(0, 0, 0.4), top: "auto", bottom: 0, left: 30 }} />
-        <div style={{ ...glowStyle(0, 0, 1.2), top: "auto", bottom: 0, right: 30, left: "auto" }} />
+        <div className="ss-decor" style={glowStyle(47, 30, 0)} />
+        <div className="ss-decor" style={glowStyle(47, 252, 0.8)} />
+        <div className="ss-decor" style={{ ...glowStyle(0, 0, 0.4), top: "auto", bottom: 0, left: 30 }} />
+        <div className="ss-decor" style={{ ...glowStyle(0, 0, 1.2), top: "auto", bottom: 0, right: 30, left: "auto" }} />
         {[
           { text: "310UB40.4", top: 20, right: -90, delay: "0s" },
           { text: "Gr 300PLUS", bottom: 30, left: -100, delay: "1.5s" },
           { text: "5017 mm", top: "45%", right: -110, delay: "0.7s" },
           { text: "M20 Gr8.8", bottom: 80, right: -85, delay: "2s" },
         ].map((s, i) => (
-          <div key={i} style={{
+          <div key={i} className="ss-decor" style={{
             position: "absolute", fontSize: 11, fontFamily: C.mono, color: C.rustDark, opacity: 0.7,
             whiteSpace: "nowrap", letterSpacing: 1, animation: `floatSpec 4s ease-in-out ${s.delay} infinite`,
             top: s.top, right: s.right, bottom: s.bottom, left: s.left, fontWeight: 600,
@@ -285,6 +292,12 @@ function FabDrawingMock() {
         <span style={{ color: "#fff", fontSize: 12, fontWeight: 700, letterSpacing: 0.5 }}>FAB DRAWING — MARK 005</span>
         <span style={{ color: "rgba(255,255,255,0.75)", fontSize: 10.5, fontFamily: C.mono }}>310UB40.4</span>
       </div>
+      {/* The mock is drawn to look like a real drawing package. It is not one,
+          and nothing on this page produces one, so it says so on its face rather
+          than relying on the section heading above it. */}
+      <div style={{ background: C.amberBg, color: C.amber, fontSize: 9.5, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", padding: "5px 16px", borderBottom: `1px solid ${C.borderLight}` }}>
+        Illustrative sample — not generated output
+      </div>
       <div style={{ padding: 16 }}>
         <div style={{ height: 110, position: "relative", background: C.bg, borderRadius: 8, border: `1px solid ${C.borderLight}`, marginBottom: 12 }}>
           {/* beam */}
@@ -308,136 +321,37 @@ function FabDrawingMock() {
   );
 }
 
-// === AUTH POPOVER (sign in / sign up) ===
-function AuthPopover({ onClose, align = "right", defaultMode = "signup" }: { onClose: () => void; align?: "left" | "right" | "center"; defaultMode?: "signup" | "signin" }) {
-  const [mode, setMode] = useState<"signup" | "signin">(defaultMode);
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [errors, setErrors] = useState<{ name?: string; email?: string; password?: string }>({});
-  const navigate = useNavigate();
-  const popRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    setMode(defaultMode);
-    setErrors({});
-  }, [defaultMode]);
-
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (popRef.current && !popRef.current.contains(e.target as Node)) onClose();
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [onClose]);
-
-  const validate = () => {
-    const next: { name?: string; email?: string; password?: string } = {};
-    if (mode === "signup" && name.trim().length === 0) {
-      next.name = "Enter your full name";
-    }
-    if (email.trim().length === 0) {
-      next.email = "Enter your email address";
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
-      next.email = "Enter a valid email address";
-    }
-    if (password.length === 0) {
-      next.password = "Enter your password";
-    } else if (mode === "signup" && password.length < 8) {
-      next.password = "Must be at least 8 characters";
-    }
-    setErrors(next);
-    return Object.keys(next).length === 0;
-  };
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!validate()) return;
-    navigate("/dashboard");
-  };
-
-  const updateName = (v: string) => { setName(v); if (errors.name) setErrors((e) => ({ ...e, name: undefined })); };
-  const updateEmail = (v: string) => { setEmail(v); if (errors.email) setErrors((e) => ({ ...e, email: undefined })); };
-  const updatePassword = (v: string) => { setPassword(v); if (errors.password) setErrors((e) => ({ ...e, password: undefined })); };
-
-  const positionStyle: React.CSSProperties = align === "center"
-    ? { left: "50%", transform: "translateX(-50%)" }
-    : align === "left" ? { left: 0 } : { right: 0 };
-
-  return (
-    <div ref={popRef} style={{
-      position: "absolute", top: "calc(100% + 12px)",
-      ...positionStyle,
-      width: 340, maxWidth: "calc(100vw - 32px)",
-      background: "#fff", borderRadius: 14, padding: 28,
-      boxShadow: `0 20px 60px rgba(0,0,0,0.14), 0 0 0 1px ${C.border}`,
-      zIndex: 200, color: C.ink,
-    }}>
-      <button onClick={onClose} aria-label="Close" style={{
-        position: "absolute", top: 16, right: 16, background: "none", border: "none",
-        color: C.grey, cursor: "pointer", padding: 4,
-      }}>
-        <X size={16} />
-      </button>
-
-      <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 22 }}>
-        <div style={{ width: 26, height: 26, background: C.rust, borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 14, color: "#fff" }}>S</div>
-        <span style={{ fontWeight: 700, fontSize: 13, letterSpacing: 2.5, color: C.rust }}>STEELSPEC</span>
-      </div>
-
-      <h3 style={{ fontSize: 19, fontWeight: 700, marginBottom: 6, color: C.ink }}>
-        {mode === "signup" ? "Create your account" : "Welcome back"}
-      </h3>
-      <p style={{ fontSize: 12.5, color: C.grey, marginBottom: 20, lineHeight: 1.5 }}>
-        {mode === "signup"
-          ? "Start turning steel models into schedules in minutes."
-          : "Sign in to pick up where you left off."}
-      </p>
-
-      <form onSubmit={handleSubmit} noValidate>
-        {mode === "signup" && (
-          <FloatingInput label="Full name" name="name" value={name} onChange={updateName} error={errors.name} />
-        )}
-        <FloatingInput label="Email address" type="email" name="email" value={email} onChange={updateEmail} error={errors.email} />
-        <FloatingInput label="Password" type="password" name="password" value={password} onChange={updatePassword} error={errors.password} />
-
-        <button type="submit" style={{
-          width: "100%", marginTop: 20, padding: "13px 18px", background: C.rust, color: "#fff",
-          border: "none", borderRadius: 8, fontSize: 14, fontWeight: 700, cursor: "pointer",
-          fontFamily: "inherit", transition: "background 0.2s",
-        }}
-          onMouseEnter={(e) => (e.currentTarget.style.background = C.rustLight)}
-          onMouseLeave={(e) => (e.currentTarget.style.background = C.rust)}>
-          {mode === "signup" ? "Create account" : "Sign in"}
-        </button>
-      </form>
-
-      <div style={{ textAlign: "center", marginTop: 18, fontSize: 12.5, color: C.grey }}>
-        {mode === "signup" ? (
-          <>Already have an account?{" "}
-            <a onClick={() => setMode("signin")} style={{ color: C.rust, fontWeight: 600, cursor: "pointer" }}>Sign in</a>
-          </>
-        ) : (
-          <>New to SteelSpec?{" "}
-            <a onClick={() => setMode("signup")} style={{ color: C.rust, fontWeight: 600, cursor: "pointer" }}>Create an account</a>
-          </>
-        )}
-      </div>
-    </div>
-  );
-}
+// Signing in and signing up are the real AuthPage at /signup, which already
+// carries the whole flow — the form, Supabase, confirmation, errors. This page
+// used to open a popover with its own copy of that form, which validated the
+// fields and then navigated to /dashboard without authenticating anybody. The
+// nav controls now go straight to the real route, so there is one auth UI and
+// no path that looks like it created an account when it did not.
 
 // === MAIN PAGE ===
+
+// The nav's text links are buttons, not anchors. They scroll the page or move to
+// another route, and an <a> with no href is not a tab stop — it could not be
+// reached or announced by keyboard at all.
+const navLinkStyle: React.CSSProperties = {
+  color: C.ink2, fontSize: 13, letterSpacing: 0.3, background: "none", border: "none",
+  padding: 0, cursor: "pointer", fontFamily: "inherit",
+};
+
+const mobileNavLinkStyle: React.CSSProperties = {
+  color: C.ink2, fontSize: 15, padding: "14px 4px", background: "none", border: "none",
+  borderBottom: `1px solid ${C.borderLight}`, cursor: "pointer", fontFamily: "inherit", textAlign: "left",
+};
+
 export default function LandingPage() {
   const navigate = useNavigate();
   const [navSolid, setNavSolid] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [authOpen, setAuthOpen] = useState(false);
-  const [authMode, setAuthMode] = useState<"signup" | "signin">("signup");
-  const openAuth = (mode: "signup" | "signin") => {
-    setAuthMode(mode);
-    setAuthOpen((v) => (authMode === mode ? !v : true));
-  };
+
+  // The only place this page sends anyone to authenticate. AuthPage already
+  // reads the ?mode= convention, so both controls land on the tab they name.
+  const goToAuth = (mode: "signup" | "signin") =>
+    navigate(mode === "signin" ? "/signup?mode=signin" : "/signup");
 
   useEffect(() => {
     if (window.location.hash) {
@@ -477,20 +391,19 @@ export default function LandingPage() {
 
         <div className="ss-nav-links ss-nav-desktop" style={{ display: "flex", gap: 28, alignItems: "center", position: "relative" }}>
           {navLinks.map((id) => (
-            <a key={id} onClick={() => smoothScroll(id)} style={{ color: C.ink2, fontSize: 13, textDecoration: "none", cursor: "pointer", letterSpacing: 0.3 }}>
+            <button key={id} type="button" className="ss-focus" onClick={() => smoothScroll(id)} style={navLinkStyle}>
               {id === "output" ? "Sample Output" : id === "how" ? "How it works" : id.charAt(0).toUpperCase() + id.slice(1)}
-            </a>
+            </button>
           ))}
-          <a onClick={() => openAuth("signin")} style={{ color: C.ink2, fontSize: 13, fontWeight: 600, textDecoration: "none", cursor: "pointer", letterSpacing: 0.3 }}>
+          <button type="button" className="ss-focus" onClick={() => goToAuth("signin")} style={{ ...navLinkStyle, fontWeight: 600 }}>
             Sign In
-          </a>
-          <button onClick={() => openAuth("signup")} style={{
+          </button>
+          <button type="button" className="ss-focus" onClick={() => goToAuth("signup")} style={{
             padding: "9px 18px", background: C.rust, color: "#fff", border: "none", borderRadius: 7,
             fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "inherit",
           }}>
             Sign Up
           </button>
-          {authOpen && <AuthPopover onClose={() => setAuthOpen(false)} align="right" defaultMode={authMode} />}
         </div>
 
         <button
@@ -511,23 +424,22 @@ export default function LandingPage() {
           display: "flex", flexDirection: "column", padding: "8px 20px 20px",
         }}>
           {navLinks.map((id) => (
-            <a key={id} onClick={() => { smoothScroll(id); setMobileMenuOpen(false); }}
-              style={{ color: C.ink2, fontSize: 15, textDecoration: "none", cursor: "pointer", padding: "14px 4px", borderBottom: `1px solid ${C.borderLight}` }}>
+            <button key={id} type="button" className="ss-focus" onClick={() => { smoothScroll(id); setMobileMenuOpen(false); }}
+              style={mobileNavLinkStyle}>
               {id === "output" ? "Sample Output" : id === "how" ? "How it works" : id.charAt(0).toUpperCase() + id.slice(1)}
-            </a>
+            </button>
           ))}
-          <a onClick={() => { openAuth("signin"); }}
-            style={{ color: C.ink2, fontSize: 15, fontWeight: 600, textDecoration: "none", cursor: "pointer", padding: "14px 4px", borderBottom: `1px solid ${C.borderLight}` }}>
+          <button type="button" className="ss-focus" onClick={() => goToAuth("signin")}
+            style={{ ...mobileNavLinkStyle, fontWeight: 600 }}>
             Sign In
-          </a>
-          <div style={{ position: "relative", marginTop: 14 }}>
-            <button onClick={() => openAuth("signup")} style={{
+          </button>
+          <div style={{ marginTop: 14 }}>
+            <button type="button" className="ss-focus" onClick={() => goToAuth("signup")} style={{
               width: "100%", padding: "12px 18px", background: C.rust, color: "#fff", border: "none", borderRadius: 7,
               fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit",
             }}>
               Sign Up
             </button>
-            {authOpen && <AuthPopover onClose={() => setAuthOpen(false)} align="center" defaultMode={authMode} />}
           </div>
         </div>
       )}
@@ -559,18 +471,20 @@ export default function LandingPage() {
             </Reveal>
             <Reveal delay={0.2}>
               <p className="ss-hero-desc" style={{ fontSize: 17, color: C.grey, lineHeight: 1.65, maxWidth: 440 }}>
-                Upload your engineer's IFC or DWG file. Get a complete steel schedule and connection report in minutes — not days. Price the job same-day instead of losing an evening to a manual count.
+                Upload your engineer's DXF file or PDF drawing set. Get an itemised steel schedule back in minutes — not days. Price the job same-day instead of losing an evening to a manual count.
               </p>
             </Reveal>
             <Reveal delay={0.3}>
               <div className="ss-cta-row">
-                <button onClick={() => navigate("/signup")} style={{
+                {/* This button goes to /signup, so it says so. It used to read
+                    "Learn more", which described a section that does not exist. */}
+                <button type="button" className="ss-focus" onClick={() => navigate("/signup")} style={{
                   display: "inline-flex", alignItems: "center", gap: 8, padding: "15px 28px",
                   background: C.rust, color: "#fff", border: "none", borderRadius: 8, fontSize: 14,
                   fontWeight: 600, cursor: "pointer", transition: "all 0.25s", fontFamily: "inherit",
                   boxShadow: "0 6px 20px rgba(196,99,58,0.25)",
                 }}>
-                  Learn more <ArrowRight size={16} />
+                  Get started <ArrowRight size={16} />
                 </button>
               </div>
             </Reveal>
@@ -582,14 +496,20 @@ export default function LandingPage() {
 
         <div style={{ position: "absolute", bottom: 28, left: "50%", transform: "translateX(-50%)", display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
           <span style={{ fontSize: 10, color: C.greyLight, letterSpacing: 2, textTransform: "uppercase" }}>Scroll</span>
-          <ChevronDown size={16} color={C.greyLight} style={{ animation: "floatSpec 2s ease-in-out infinite" }} />
+          <ChevronDown size={16} color={C.greyLight} className="ss-decor" style={{ animation: "floatSpec 2s ease-in-out infinite" }} />
         </div>
       </section>
 
       {/* STATS */}
       <section className="ss-section" style={{ background: C.card, borderTop: `1px solid ${C.border}`, borderBottom: `1px solid ${C.border}`, padding: "48px 40px" }}>
         <div style={{ maxWidth: 900, margin: "0 auto", display: "flex", justifyContent: "space-around", textAlign: "center", flexWrap: "wrap", gap: 32 }}>
-          {[{ val: 218, suffix: "", label: "Steel sections" }, { val: 29, suffix: "", label: "Fab drawings" }, { val: 100, suffix: "%", label: "NZ/AU standards" }].map((s, i) => (
+          {/* Two counters were removed here — "29 Fab drawings" and a "<2min"
+              processing time. Neither is a capability the product can currently
+              stand behind (fabrication output does not exist yet, and no measured
+              processing time is recorded anywhere), and a count-up animation
+              presented them as measured data. Nothing invented was put in their
+              place. */}
+          {[{ val: 222, suffix: "", label: "Steel sections" }, { val: 100, suffix: "%", label: "NZ/AU standards" }].map((s, i) => (
             <Reveal key={i} delay={i * 0.1}>
               <div>
                 <div style={{ fontSize: 36, fontWeight: 700, color: C.rust, fontFamily: C.mono, letterSpacing: -1 }}><Counter end={s.val} suffix={s.suffix} /></div>
@@ -597,7 +517,6 @@ export default function LandingPage() {
               </div>
             </Reveal>
           ))}
-          <Reveal delay={0.3}><div><div style={{ fontSize: 36, fontWeight: 700, color: C.rust, fontFamily: C.mono, letterSpacing: -1 }}>&lt;2min</div><div style={{ fontSize: 11, color: C.grey, marginTop: 4, textTransform: "uppercase", letterSpacing: 2, fontWeight: 500 }}>Processing time</div></div></Reveal>
         </div>
       </section>
 
@@ -607,7 +526,7 @@ export default function LandingPage() {
           <div style={{ textAlign: "center", marginBottom: 64 }}>
             <Reveal><div style={{ fontSize: 11, fontWeight: 600, letterSpacing: 3, color: C.rust, textTransform: "uppercase", marginBottom: 12, display: "flex", justifyContent: "center", alignItems: "center", gap: 8 }}><span style={{ width: 20, height: 1, background: C.rust }} />Sample Output</div></Reveal>
             <Reveal delay={0.1}><h2 style={{ fontSize: 32, fontWeight: 700, letterSpacing: -0.6, marginBottom: 14, color: C.ink }}>See exactly what you get</h2></Reveal>
-            <Reveal delay={0.15}><p style={{ fontSize: 15.5, color: C.grey, maxWidth: 560, margin: "0 auto", lineHeight: 1.65 }}>Three parts to every takeoff — the schedule you quote from, the connection detail your fabricator needs, and the drawing your workshop cuts to.</p></Reveal>
+            <Reveal delay={0.15}><p style={{ fontSize: 15.5, color: C.grey, maxWidth: 560, margin: "0 auto", lineHeight: 1.65 }}>Three parts to a takeoff — the schedule you quote from, the connection detail your fabricator needs, and the drawing your workshop cuts to. The first two are produced today; fabrication drawings are on the roadmap.</p></Reveal>
           </div>
 
           {/* Row 1: Schedule */}
@@ -617,7 +536,7 @@ export default function LandingPage() {
                 <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1.5, color: C.rust, textTransform: "uppercase", marginBottom: 10 }}>01 · Steel Schedule</div>
                 <h3 style={{ fontSize: 24, fontWeight: 700, marginBottom: 14, color: C.ink, letterSpacing: -0.4 }}>Every member, itemised and weighed</h3>
                 <p style={{ fontSize: 14.5, color: C.grey, lineHeight: 1.7, marginBottom: 18 }}>
-                  Mark numbers, sections, lengths, quantities, and weights — extracted straight from the engineer's model and matched against 218 NZ/AU steel sections. No manual counting, no misread callouts.
+                  Mark numbers, sections, lengths, quantities, and weights — extracted straight from the engineer's model and matched against 222 NZ/AU steel sections. No manual counting, no misread callouts.
                 </p>
                 <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                   {["Total tonnage calculated instantly", "Grouped by section family and member type", "Ready to quote from the same day it lands"].map((b) => (
@@ -656,13 +575,20 @@ export default function LandingPage() {
           <div className="ss-output-row">
             <Reveal direction="left">
               <div>
-                <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1.5, color: C.rust, textTransform: "uppercase", marginBottom: 10 }}>03 · Fabrication Drawing</div>
+                <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1.5, color: C.rust, textTransform: "uppercase", marginBottom: 10 }}>03 · Fabrication Drawing · Roadmap</div>
                 <h3 style={{ fontSize: 24, fontWeight: 700, marginBottom: 14, color: C.ink, letterSpacing: -0.4 }}>Shop-ready, per mark</h3>
+                {/* This section describes output the product does not produce yet.
+                    It said "available on eligible projects" in one bullet while the
+                    Fabrication screen says nothing has been produced for any project;
+                    it now says the same thing the product does. */}
                 <p style={{ fontSize: 14.5, color: C.grey, lineHeight: 1.7, marginBottom: 18 }}>
-                  A dedicated drawing for every mark — member elevation, fitted plates, bolt hole patterns, and section views — laid out the way your workshop already reads them.
+                  Fabrication drawings are a roadmap feature, not a current capability — no fabrication drawing
+                  is generated for any project today. This is the shape they are planned to take: a dedicated
+                  drawing for every mark — member elevation, fitted plates, bolt hole patterns, and section
+                  views — laid out the way your workshop already reads them.
                 </p>
                 <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                  {["One page per mark, dimensioned and labelled", "Matches standard NZ fabrication drawing conventions", "Roadmap feature — available on eligible projects"].map((b) => (
+                  {["One page per mark, dimensioned and labelled", "Matches standard NZ fabrication drawing conventions", "Roadmap feature — not currently available"].map((b) => (
                     <div key={b} style={{ display: "flex", alignItems: "flex-start", gap: 9, fontSize: 13.5, color: C.ink2 }}>
                       <Check size={15} color={C.rust} strokeWidth={2.5} style={{ marginTop: 2, flexShrink: 0 }} />{b}
                     </div>
@@ -686,10 +612,10 @@ export default function LandingPage() {
           <div className="ss-features-grid">
             <FeatureCard icon={Zap} title="Automatic extraction" desc="Steel members, sections, lengths, and weights pulled directly from your engineer's model. No manual data entry." delay={0.05} />
             <FeatureCard icon={Layers} title="Connection reporting" desc="Bolt sizes, grades, plate thicknesses, and weld details extracted and presented alongside the members they connect." delay={0.1} />
-            <FeatureCard icon={BarChart3} title="NZ steel database" desc="218 sections across UB, UC, PFC, EA, RHS, SHS, CHS families. All matched to AS/NZS standards." delay={0.15} />
+            <FeatureCard icon={BarChart3} title="NZ steel database" desc="222 sections across UB, UC, PFC, EA, RHS, SHS, CHS families. All matched to AS/NZS standards." delay={0.15} />
             <FeatureCard icon={FileText} title="Professional PDF output" desc="Steel schedules, connection summaries, and schematic diagrams in a clean report you can hand to your workshop." delay={0.2} />
-            <FeatureCard icon={Shield} title="Confidence indicators" desc="Every extracted member flagged with extraction confidence. Review anything uncertain before downloading." delay={0.25} />
-            <FeatureCard icon={RefreshCw} title="Multiple formats" desc="IFC, DWG, and DXF files supported. Works with output from Revit, Tekla, ArchiCAD, and standard CAD software." delay={0.3} />
+            <FeatureCard icon={Shield} title="Confidence indicators" desc="Every extracted member carries an extraction confidence value, and anything read with uncertainty is flagged Review required. Extracted results are not engineering-verified." delay={0.25} />
+            <FeatureCard icon={RefreshCw} title="Multiple formats" desc="DXF CAD drawings and PDF drawing sets supported. IFC and DWG are on the roadmap, not yet available." delay={0.3} />
           </div>
         </div>
       </section>
@@ -702,7 +628,7 @@ export default function LandingPage() {
         </div>
         <div className="ss-steps">
           <div style={{ position: "absolute", top: 26, left: 80, right: 80, height: 1, background: `linear-gradient(90deg, transparent, ${C.rustBorder}, transparent)` }} />
-          <Step num="1" title="Upload" desc="Drop your IFC or DWG/DXF file from the structural engineer" delay={0.1} />
+          <Step num="1" title="Upload" desc="Drop your DXF file or PDF drawing set from the structural engineer" delay={0.1} />
           <Step num="2" title="Extract" desc="We parse every steel member, section, and connection detail automatically" delay={0.2} />
           <Step num="3" title="Download" desc="Review the schedule on screen, then download your professional PDF report" delay={0.3} />
         </div>
@@ -715,7 +641,7 @@ export default function LandingPage() {
           <Reveal><div style={{ fontSize: 11, fontWeight: 600, letterSpacing: 3, color: "rgba(255,255,255,0.8)", textTransform: "uppercase", marginBottom: 12 }}>Ready?</div></Reveal>
           <Reveal delay={0.1}><h2 style={{ fontSize: 32, fontWeight: 700, marginBottom: 28, letterSpacing: -0.5, color: "#fff" }}>Stop counting steel by hand</h2></Reveal>
           <Reveal delay={0.2}>
-            <button onClick={() => navigate("/signup")} style={{
+            <button type="button" className="ss-focus" onClick={() => navigate("/signup")} style={{
               padding: "16px 36px", background: "#fff", color: C.rust, border: "none", borderRadius: 8,
               fontSize: 16, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", boxShadow: "0 8px 24px rgba(0,0,0,0.15)",
             }}>

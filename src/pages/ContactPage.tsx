@@ -1,9 +1,23 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { ArrowLeft, Mail, Phone, MapPin, Clock, Check } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+import { ArrowLeft, Mail, MapPin, Clock, Info } from "lucide-react";
 import { theme as C } from "../lib/theme";
 import { FloatingInput, FloatingTextarea } from "../components/FloatingInput";
 import Footer from "../components/Footer";
+
+// The only contact address that exists anywhere in this repository. It is
+// stated here once so the page cannot drift into publishing a second one.
+const CONTACT_EMAIL = "hello@steelspec.co.nz";
+
+// Only details the product can actually stand behind. There is no verified
+// phone number in this repository, so no phone number is published — an
+// invented one would be worse than its absence.
+const CONTACT_DETAILS: { icon: LucideIcon; label: string; value: string; href?: string }[] = [
+  { icon: Mail, label: "Email", value: CONTACT_EMAIL, href: `mailto:${CONTACT_EMAIL}` },
+  { icon: MapPin, label: "Location", value: "Auckland, New Zealand" },
+  { icon: Clock, label: "Response time", value: "Within 1 business day" },
+];
 
 export default function ContactPage() {
   const [name, setName] = useState("");
@@ -66,12 +80,7 @@ export default function ContactPage() {
           {/* Contact info */}
           <div>
             <div style={{ display: "flex", flexDirection: "column", gap: 16, marginBottom: 32 }}>
-              {[
-                { icon: Mail, label: "Email", value: "hello@steelspec.co.nz" },
-                { icon: Phone, label: "Phone", value: "+64 9 123 4567" },
-                { icon: MapPin, label: "Location", value: "Auckland, New Zealand" },
-                { icon: Clock, label: "Response time", value: "Within 1 business day" },
-              ].map(({ icon: Icon, label, value }) => (
+              {CONTACT_DETAILS.map(({ icon: Icon, label, value, href }) => (
                 <div key={label} style={{ display: "flex", alignItems: "flex-start", gap: 14 }}>
                   <div style={{
                     width: 40, height: 40, borderRadius: 10, background: C.rustBg, border: `1px solid ${C.rustBorder}`,
@@ -81,7 +90,11 @@ export default function ContactPage() {
                   </div>
                   <div>
                     <div style={{ fontSize: 11, color: C.greyLight, textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 2 }}>{label}</div>
-                    <div style={{ fontSize: 14.5, fontWeight: 600, color: C.ink }}>{value}</div>
+                    {href ? (
+                      <a href={href} className="ss-focus" style={{ fontSize: 14.5, fontWeight: 600, color: C.rust, textDecoration: "none" }}>{value}</a>
+                    ) : (
+                      <div style={{ fontSize: 14.5, fontWeight: 600, color: C.ink }}>{value}</div>
+                    )}
                   </div>
                 </div>
               ))}
@@ -99,6 +112,19 @@ export default function ContactPage() {
 
           {/* Contact form */}
           <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: "32px 28px", boxShadow: "0 8px 30px rgba(0,0,0,0.04)" }}>
+            {/* Said before the form is filled in, not after: there is no endpoint
+                behind this form, so the honest thing is to say so up front and give
+                the address that does reach a person. */}
+            <div style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "12px 14px", background: C.rustBg, border: `1px solid ${C.rustBorder}`, borderRadius: 10, marginBottom: 18 }}>
+              <Info size={16} color={C.rust} style={{ flexShrink: 0, marginTop: 2 }} />
+              <div style={{ fontSize: 12.5, color: C.ink2, lineHeight: 1.6 }}>
+                <strong style={{ color: C.ink }}>The contact form is not connected yet.</strong> Nothing entered here is sent.
+                Email <a href={`mailto:${CONTACT_EMAIL}`} className="ss-focus" style={{ color: C.rust, fontWeight: 600, textDecoration: "none" }}>{CONTACT_EMAIL}</a> instead.
+              </div>
+            </div>
+
+            {/* The panel below used to read "Message sent". Nothing is transmitted
+                by this page, so it must not say that — it says what happened. */}
             {!submitted ? (
               <form onSubmit={handleSubmit} noValidate>
                 <FloatingInput label="Full name" name="contact-name" value={name} onChange={updateName} error={errors.name} />
@@ -119,14 +145,16 @@ export default function ContactPage() {
             ) : (
               <div style={{ textAlign: "center", padding: "40px 12px" }}>
                 <div style={{
-                  width: 52, height: 52, borderRadius: "50%", background: C.greenBg, color: C.green,
+                  width: 52, height: 52, borderRadius: "50%", background: C.rustBg, color: C.rust,
                   display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 18px",
                 }}>
-                  <Check size={24} />
+                  <Info size={24} />
                 </div>
-                <h3 style={{ fontSize: 18, fontWeight: 700, marginBottom: 8, color: C.ink }}>Message sent</h3>
-                <p style={{ fontSize: 13.5, color: C.grey, lineHeight: 1.6 }}>
-                  Thanks for reaching out — we'll get back to you within one business day.
+                <h3 style={{ fontSize: 18, fontWeight: 700, marginBottom: 8, color: C.ink }}>Nothing was sent</h3>
+                <p style={{ fontSize: 13.5, color: C.grey, lineHeight: 1.6, margin: 0 }}>
+                  The contact form is not connected yet, so your message has not reached us. Email{" "}
+                  <a href={`mailto:${CONTACT_EMAIL}`} className="ss-focus" style={{ color: C.rust, fontWeight: 600, textDecoration: "none" }}>{CONTACT_EMAIL}</a>{" "}
+                  and we'll get back to you within one business day.
                 </p>
               </div>
             )}

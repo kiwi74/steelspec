@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { X, FileText } from "lucide-react";
 import { theme as C } from "../lib/theme";
 import { useAuth } from "../lib/AuthContext";
@@ -16,6 +16,28 @@ export default function ConnectionReviewSurface({ projectId, onClose }: { projec
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [html, setHtml] = useState<string | null>(null);
+
+  // === Overlay behaviour ===
+  //
+  // Escape closes the surface, the page behind it does not scroll while it is
+  // open, and the panel is announced as a dialog. This changes nothing about the
+  // request, the headers or what the service returns. onClose is held in a ref so
+  // the effect runs once rather than on every parent render.
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") closeRef.current(); };
+    document.addEventListener("keydown", onKey);
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    panelRef.current?.focus();
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = previousOverflow;
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -81,25 +103,32 @@ export default function ConnectionReviewSurface({ projectId, onClose }: { projec
   return (
     <div
       onClick={onClose}
+      className="ss-modal-overlay"
       style={{
         position: "fixed", inset: 0, background: "rgba(20,20,20,0.7)", zIndex: 210,
         display: "flex", alignItems: "center", justifyContent: "center", padding: 20,
       }}
     >
       <div
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Connection review"
+        tabIndex={-1}
         onClick={(e) => e.stopPropagation()}
+        className="ss-modal-panel"
         style={{
           background: C.bg, borderRadius: 14, width: "100%", maxWidth: 1100, height: "85vh",
-          display: "flex", flexDirection: "column", overflow: "hidden",
+          display: "flex", flexDirection: "column", overflow: "hidden", outline: "none",
           boxShadow: "0 24px 70px rgba(0,0,0,0.3)",
         }}
       >
         {/* Header */}
-        <div style={{
-          display: "flex", justifyContent: "space-between", alignItems: "center",
+        <div className="ss-modal-head" style={{
+          display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12,
           padding: "16px 20px", borderBottom: `1px solid ${C.border}`, background: C.card,
         }}>
-          <div>
+          <div className="ss-modal-heading">
             <div style={{ fontSize: 11, color: C.rust, fontWeight: 600, letterSpacing: 1, textTransform: "uppercase" }}>
               Review
             </div>
@@ -107,7 +136,7 @@ export default function ConnectionReviewSurface({ projectId, onClose }: { projec
               Connection review
             </div>
           </div>
-          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: C.grey, padding: 6 }}>
+          <button onClick={onClose} aria-label="Close" className="ss-focus" style={{ background: "none", border: "none", cursor: "pointer", color: C.grey, padding: 6, flexShrink: 0 }}>
             <X size={20} />
           </button>
         </div>

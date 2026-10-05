@@ -19,11 +19,16 @@ function FloatingInput({
           onChange={(e) => onChange(e.target.value)}
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}
+          // Same keyboard-focus treatment as the shared input in
+          // components/FloatingInput: the inline `outline: none` moves into the
+          // .ss-input rule so :focus-visible can win. Nothing else changes —
+          // mouse focus looks exactly as it did.
+          className="ss-input"
           style={{
             width: "100%", padding: "14px 15px", background: "#fff",
-            border: `1.5px solid ${error ? "#c44" : active ? C.rust : C.border}`,
+            border: `1.5px solid ${error ? C.red : active ? C.rust : C.border}`,
             borderRadius: 9, color: C.ink, fontSize: 15, fontFamily: "inherit",
-            outline: "none", transition: "border-color 0.2s", boxSizing: "border-box",
+            transition: "border-color 0.2s", boxSizing: "border-box",
           }}
         />
         <label
@@ -33,7 +38,7 @@ function FloatingInput({
             top: active ? -9 : "50%", transform: active ? "none" : "translateY(-50%)",
             fontSize: active ? 11.5 : 15, padding: active ? "0 6px" : 0,
             background: active ? "#fff" : "transparent",
-            color: error ? "#c44" : active ? C.rust : C.grey,
+            color: error ? C.red : active ? C.rust : C.grey,
             transition: "all 0.15s ease-out", fontWeight: active ? 600 : 400,
             letterSpacing: active ? 0.3 : 0,
           }}
@@ -42,7 +47,7 @@ function FloatingInput({
         </label>
       </div>
       {error && (
-        <div style={{ fontSize: 12, color: "#c44", marginTop: 6, paddingLeft: 2 }}>{error}</div>
+        <div style={{ fontSize: 12, color: C.red, marginTop: 6, paddingLeft: 2 }}>{error}</div>
       )}
     </div>
   );
@@ -216,16 +221,14 @@ export default function AuthPage() {
           <FloatingInput label="Email address" type="email" name="email" value={email} onChange={updateEmail} error={errors.email} />
           <FloatingInput label="Password" type="password" name="password" value={password} onChange={updatePassword} error={errors.password} />
 
-          {mode === "signin" && (
-            <div style={{ textAlign: "right", marginTop: 10 }}>
-              <a style={{ fontSize: 12.5, color: C.grey, cursor: "pointer" }}>Forgot password?</a>
-            </div>
-          )}
+          {/* There is no password-reset path: no route, no email flow, no backend
+              endpoint. A "Forgot password?" control that does nothing when clicked is
+              worse than its absence, so it is absent until there is something behind it. */}
 
           {serverError && (
             <div style={{
               marginTop: 16, padding: "10px 14px", background: "rgba(204,68,68,0.06)",
-              border: "1px solid rgba(204,68,68,0.25)", borderRadius: 8, color: "#c44", fontSize: 12.5,
+              border: `1px solid ${C.redBorder}`, borderRadius: 8, color: C.red, fontSize: 12.5,
             }}>
               {serverError}
             </div>
@@ -243,10 +246,14 @@ export default function AuthPage() {
           </button>
         </form>
 
+        {/* No Terms or Privacy document exists anywhere in this repository — there is no
+            route, no page and no file to point at. The names are kept as plain text
+            because naming them is the point of the notice, but they are no longer
+            anchors: neither is styled or cursor-ed to look clickable, because neither
+            leads anywhere. This states a real gap, not a resolved one — the documents
+            still have to be written and the links added when they are. */}
         <div style={{ textAlign: "center", marginTop: 22, fontSize: 12.5, color: C.grey }}>
-          By continuing you agree to our{" "}
-          <a style={{ color: C.ink2, cursor: "pointer" }}>Terms</a> and{" "}
-          <a style={{ color: C.ink2, cursor: "pointer" }}>Privacy Policy</a>.
+          By continuing you agree to our Terms and Privacy Policy.
         </div>
         </>
         )}

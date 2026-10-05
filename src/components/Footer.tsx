@@ -1,29 +1,7 @@
 import { useNavigate } from "react-router-dom";
-import { Mail } from "lucide-react";
 
-function LinkedInIcon({ size = 15 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor">
-      <path d="M20.45 20.45h-3.55v-5.57c0-1.33-.02-3.03-1.85-3.03-1.85 0-2.14 1.45-2.14 2.94v5.66H9.36V9h3.41v1.56h.05c.47-.9 1.63-1.85 3.36-1.85 3.6 0 4.27 2.37 4.27 5.45v6.29zM5.34 7.43a2.06 2.06 0 1 1 0-4.12 2.06 2.06 0 0 1 0 4.12zM7.12 20.45H3.56V9h3.56v11.45z"/>
-    </svg>
-  );
-}
-function InstagramIcon({ size = 15 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-      <rect x="3" y="3" width="18" height="18" rx="5" />
-      <circle cx="12" cy="12" r="4" />
-      <circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none" />
-    </svg>
-  );
-}
-function FacebookIcon({ size = 15 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor">
-      <path d="M14 13.5h2.5l1-4H14V7.5c0-1.03 0-2 2-2h1.5V2.14c-.35-.05-1.5-.14-2.72-.14C11.3 2 9.5 3.66 9.5 6.7V9.5H6.5v4h3V22h4.5v-8.5z"/>
-    </svg>
-  );
-}
+// The three social glyphs that used to live here went with the icon row they fed;
+// nothing else referenced them.
 
 export default function Footer() {
   const navigate = useNavigate();
@@ -36,19 +14,42 @@ export default function Footer() {
     }, 80);
   };
 
+  // An entry is a link only when it has somewhere to go. An entry with neither a
+  // route nor a section renders as plain text — no anchor, no pointer cursor and no
+  // hover colour — because each of those three is a promise that a click will do
+  // something, and for "About", "Support" and the two legal documents there is
+  // nothing behind them yet. This is deliberately not "give every entry a
+  // destination": a plausible-looking destination that is not the real one would be
+  // a worse lie than the dead link it replaced.
+  //
+  // The dead entries are dimmed to the same 0.45 the copyright line already uses,
+  // so they read as the footer's own quiet text rather than as controls.
   const linkCol = (title: string, links: { label: string; to?: string; scrollTo?: string }[]) => (
     <div>
       <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", color: "rgba(245,237,228,0.4)", marginBottom: 16 }}>{title}</div>
       <div style={{ display: "flex", flexDirection: "column", gap: 11 }}>
-        {links.map((l) => (
-          <a key={l.label}
-            onClick={() => { if (l.to) navigate(l.to); else if (l.scrollTo) goToSection(l.scrollTo); }}
-            style={{ fontSize: 13.5, color: "rgba(245,237,228,0.75)", textDecoration: "none", cursor: (l.to || l.scrollTo) ? "pointer" : "default" }}
-            onMouseEnter={(e) => (e.currentTarget.style.color = "#e8854a")}
-            onMouseLeave={(e) => (e.currentTarget.style.color = "rgba(245,237,228,0.75)")}>
-            {l.label}
-          </a>
-        ))}
+        {links.map((l) => {
+          if (!l.to && !l.scrollTo) {
+            return <span key={l.label} style={{ fontSize: 13.5, color: "rgba(245,237,228,0.45)" }}>{l.label}</span>;
+          }
+          // A button, not an anchor. These entries navigate or scroll, and an <a>
+          // with no href is not a tab stop — the whole column was unreachable by
+          // keyboard. alignSelf keeps the hit area the size the text was.
+          return (
+            <button key={l.label}
+              type="button"
+              className="ss-focus"
+              onClick={() => { if (l.to) navigate(l.to); else if (l.scrollTo) goToSection(l.scrollTo); }}
+              style={{
+                fontSize: 13.5, color: "rgba(245,237,228,0.75)", background: "none", border: "none",
+                padding: 0, fontFamily: "inherit", textAlign: "left", alignSelf: "flex-start", cursor: "pointer",
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.color = "#e8854a")}
+              onMouseLeave={(e) => (e.currentTarget.style.color = "rgba(245,237,228,0.75)")}>
+              {l.label}
+            </button>
+          );
+        })}
       </div>
     </div>
   );
@@ -62,22 +63,17 @@ export default function Footer() {
               <div style={{ width: 28, height: 28, background: "#c4633a", borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 16, color: "#f5ede4" }}>S</div>
               <span style={{ fontWeight: 700, fontSize: 14, letterSpacing: 3, color: "#c4633a" }}>STEELSPEC</span>
             </div>
-            <p style={{ fontSize: 13, color: "rgba(245,237,228,0.6)", lineHeight: 1.7, marginBottom: 20 }}>
-              Structural steel takeoff, automated. Upload your engineer's model, get a fabrication-ready steel schedule in minutes.
+            {/* The 20px bottom margin this paragraph used to carry existed only to
+                separate it from the icon row below; with that row gone the paragraph
+                is the last thing in the column. */}
+            <p style={{ fontSize: 13, color: "rgba(245,237,228,0.6)", lineHeight: 1.7 }}>
+              Structural steel takeoff, automated. Upload your engineer's model, get an itemised steel schedule in minutes. Fabrication drawings are on the roadmap.
             </p>
-            <div style={{ display: "flex", gap: 10 }}>
-              {[LinkedInIcon, InstagramIcon, FacebookIcon, Mail].map((Icon, i) => (
-                <a key={i} style={{
-                  width: 34, height: 34, borderRadius: 8, background: "rgba(245,237,228,0.06)",
-                  border: "1px solid rgba(245,237,228,0.12)", display: "flex", alignItems: "center",
-                  justifyContent: "center", color: "rgba(245,237,228,0.7)", cursor: "pointer", transition: "all 0.2s",
-                }}
-                  onMouseEnter={(e) => { e.currentTarget.style.background = "#c4633a"; e.currentTarget.style.color = "#fff"; e.currentTarget.style.borderColor = "#c4633a"; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(245,237,228,0.06)"; e.currentTarget.style.color = "rgba(245,237,228,0.7)"; e.currentTarget.style.borderColor = "rgba(245,237,228,0.12)"; }}>
-                  <Icon size={15} />
-                </a>
-              ))}
-            </div>
+            {/* Four social/mail icons used to sit here. Each was a button with no
+                destination — no profile exists and no mailto address is published —
+                and an icon has no text to fall back on, so de-linking one would have
+                left an empty tile that still looked pressable. They were removed
+                rather than pointed somewhere plausible but wrong. */}
           </div>
 
           {linkCol("Product", [

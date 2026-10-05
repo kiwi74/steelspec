@@ -118,3 +118,43 @@ button { font-family: inherit; }
   .ss-dash-stats { grid-template-columns: 1fr; }
   .ss-kv-grid { grid-template-columns: 1fr; }
 }
+
+/* === REDUCED MOTION ===
+   Only decoration is switched off: the landing page's reveal-on-scroll, its
+   counting figures, the scroll-progress bar's easing and the floating/glowing
+   accents. Content is forced visible rather than left waiting on an animation
+   that will not run. Loading spinners use `spin` and are deliberately left
+   alone — they are the one animation here that carries information. */
+@media (prefers-reduced-motion: reduce) {
+  .ss-reveal { opacity: 1 !important; transform: none !important; transition: none !important; }
+  .ss-scroll-progress { transition: none !important; }
+  .ss-decor { animation: none !important; }
+}
+
+/* === KEYBOARD FOCUS ===
+   Applied to controls the app renders itself. Mouse clicks do not trigger
+   :focus-visible, so pointer users see no change; keyboard users get a ring in
+   the same rust the rest of the product uses. */
+.ss-focus:focus-visible { outline: 2px solid #c4633a; outline-offset: 2px; }
+
+/* The inputs keep their own focus treatment (the border turns rust via React
+   state); this adds a ring only for keyboard focus. outline is reset here rather
+   than inline so the :focus-visible rule below can win. */
+.ss-input { outline: none; }
+.ss-input:focus-visible { outline: 2px solid #c4633a; outline-offset: 2px; }
+
+/* === MODAL / VIEWER RESPONSIVE ===
+   The drawing viewer and the review surface are two-pane overlays pinned to
+   85vh. Below 860px the panes stack and each scrolls, the overlay padding
+   shrinks, and the page chips grow to a usable touch target. Desktop layout is
+   untouched — every rule here is inside the media query. */
+@media (max-width: 860px) {
+  .ss-modal-overlay { padding: 8px !important; align-items: stretch !important; }
+  .ss-modal-panel { height: 100% !important; }
+  .ss-modal-head { padding: 12px 14px !important; }
+  .ss-modal-heading { min-width: 0; overflow-wrap: anywhere; }
+  .ss-viewer-body { flex-direction: column !important; overflow-y: auto !important; overflow-x: hidden !important; }
+  .ss-viewer-image { flex: 0 0 auto !important; height: 44vh !important; }
+  .ss-viewer-data { flex: 0 0 auto !important; border-left: none !important; border-top: 1px solid #e9e5df !important; }
+  .ss-viewer-chip { width: 38px !important; height: 38px !important; font-size: 12px !important; }
+}

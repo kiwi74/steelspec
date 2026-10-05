@@ -16,11 +16,12 @@ export function FloatingInput({
           onChange={(e) => onChange(e.target.value)}
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}
+          className="ss-input"
           style={{
             width: "100%", padding: "14px 15px", background: "#fff",
-            border: `1.5px solid ${error ? "#c44" : active ? C.rust : C.border}`,
+            border: `1.5px solid ${error ? C.red : active ? C.rust : C.border}`,
             borderRadius: 9, color: C.ink, fontSize: 15, fontFamily: "inherit",
-            outline: "none", transition: "border-color 0.2s", boxSizing: "border-box",
+            transition: "border-color 0.2s", boxSizing: "border-box",
           }}
         />
         <label
@@ -30,7 +31,7 @@ export function FloatingInput({
             top: active ? -9 : "50%", transform: active ? "none" : "translateY(-50%)",
             fontSize: active ? 11.5 : 15, padding: active ? "0 6px" : 0,
             background: active ? "#fff" : "transparent",
-            color: error ? "#c44" : active ? C.rust : C.grey,
+            color: error ? C.red : active ? C.rust : C.grey,
             transition: "all 0.15s ease-out", fontWeight: active ? 600 : 400,
             letterSpacing: active ? 0.3 : 0,
           }}
@@ -38,7 +39,7 @@ export function FloatingInput({
           {label}
         </label>
       </div>
-      {error && <div style={{ fontSize: 12, color: "#c44", marginTop: 6, paddingLeft: 2 }}>{error}</div>}
+      {error && <div style={{ fontSize: 12, color: C.red, marginTop: 6, paddingLeft: 2 }}>{error}</div>}
     </div>
   );
 }
@@ -58,11 +59,12 @@ export function FloatingTextarea({
           onChange={(e) => onChange(e.target.value)}
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}
+          className="ss-input"
           style={{
             width: "100%", padding: "14px 15px", background: "#fff",
-            border: `1.5px solid ${error ? "#c44" : active ? C.rust : C.border}`,
+            border: `1.5px solid ${error ? C.red : active ? C.rust : C.border}`,
             borderRadius: 9, color: C.ink, fontSize: 15, fontFamily: "inherit",
-            outline: "none", transition: "border-color 0.2s", boxSizing: "border-box", resize: "vertical",
+            transition: "border-color 0.2s", boxSizing: "border-box", resize: "vertical",
           }}
         />
         <label
@@ -72,7 +74,7 @@ export function FloatingTextarea({
             top: active ? -9 : 15, transform: "none",
             fontSize: active ? 11.5 : 15, padding: active ? "0 6px" : 0,
             background: active ? "#fff" : "transparent",
-            color: error ? "#c44" : active ? C.rust : C.grey,
+            color: error ? C.red : active ? C.rust : C.grey,
             transition: "all 0.15s ease-out", fontWeight: active ? 600 : 400,
             letterSpacing: active ? 0.3 : 0,
           }}
@@ -80,7 +82,7 @@ export function FloatingTextarea({
           {label}
         </label>
       </div>
-      {error && <div style={{ fontSize: 12, color: "#c44", marginTop: 6, paddingLeft: 2 }}>{error}</div>}
+      {error && <div style={{ fontSize: 12, color: C.red, marginTop: 6, paddingLeft: 2 }}>{error}</div>}
     </div>
   );
 }

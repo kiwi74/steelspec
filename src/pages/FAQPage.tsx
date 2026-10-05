@@ -10,15 +10,17 @@ const FAQS: { category: string; items: { q: string; a: string }[] }[] = [
     items: [
       {
         q: "What file formats does SteelSpec accept?",
-        a: "IFC (BIM models from Revit, Tekla, or ArchiCAD), and DWG/DXF (CAD drawings). IFC extractions carry higher confidence since section properties are already structured in the model; DWG/DXF extractions go through a review step before you download.",
+        a: "DXF CAD drawings and PDF drawing sets. DXF is parsed directly — members and connections — and anything uncertain is flagged for review before you download. PDF drawing sets are analysed page-by-page, which currently extracts steel members and traces each value back to its source page; connection extraction from PDFs is still on the roadmap.",
       },
       {
         q: "Do I need the source model, or will a PDF work?",
-        a: "SteelSpec needs the source IFC or DWG/DXF file — not a PDF export. If you've only received a PDF at quoting stage, ask your engineer for the underlying model file, which most structural engineering software can export directly.",
+        a: "A PDF works. If you have the source DXF, that's the richer input — members and connections are parsed directly from it. If you've only been given a PDF drawing set at quoting stage, we analyse that page-by-page instead, so you don't need to go back to the engineer for the underlying model file.",
       },
       {
         q: "How long does a takeoff take?",
-        a: "Most residential and light commercial models process in under two minutes. Larger or more complex models with hundreds of members may take a little longer.",
+        // No figure is quoted here. The product has no measured processing time
+        // to stand behind, and a number would read as a guarantee.
+        a: "There is no fixed processing time — it depends on the size and complexity of the drawing set. Smaller models finish quickly; larger ones with hundreds of members take longer.",
       },
     ],
   },
@@ -27,7 +29,7 @@ const FAQS: { category: string; items: { q: string; a: string }[] }[] = [
     items: [
       {
         q: "What's actually in the PDF report?",
-        a: "A full steel member schedule (mark, section, length, quantity, weight), a connection summary (bolts, plates, welds by grid reference), and total tonnage. Fabrication drawings for individual marks are available on eligible projects.",
+        a: "A full steel member schedule (mark, section, length, quantity, weight), a connection summary (bolts, plates, welds by grid reference), and total tonnage. Fabrication drawings for individual marks are a roadmap feature and are not currently available.",
       },
       {
         q: "Does SteelSpec design connections?",
@@ -35,7 +37,7 @@ const FAQS: { category: string; items: { q: string; a: string }[] }[] = [
       },
       {
         q: "How accurate is the extraction?",
-        a: "IFC extractions are typically high-confidence since the data is already structured. DWG/DXF extractions rely on matching text labels to geometry, so we flag anything uncertain and ask you to confirm it before the report is finalised.",
+        a: "DXF extractions rely on matching text labels to geometry, so anything uncertain is flagged as Review required. PDF drawings are read with vision: every extracted value is traceable back to the page it came from, with the extraction confidence shown alongside it. SteelSpec surfaces that review information — an in-product confirmation or resolution workflow is not available yet, so flagged items have to be checked outside the product.",
       },
     ],
   },
@@ -44,15 +46,15 @@ const FAQS: { category: string; items: { q: string; a: string }[] }[] = [
     items: [
       {
         q: "How does pricing work?",
-        a: "Pay-as-you-go: $199 (+GST) per takeoff, billed when you download the report. If you're running five or more takeoffs a month, the Workshop plan at $749/month works out cheaper per job.",
+        a: "Pay-as-you-go: $199 (+GST) per takeoff, intended to be charged when you download the report. If you're running five or more takeoffs a month, the Workshop plan at $749/month works out cheaper per job. Billing is not available yet — these are the prices we intend to offer.",
       },
       {
         q: "Can I see the extracted data before I pay?",
-        a: "Yes. The full steel schedule and connection summary are visible on screen as soon as processing finishes. Payment only unlocks the downloadable PDF.",
+        a: "Yes. The full steel schedule and connection summary are visible on screen as soon as processing finishes. Downloading the PDF is intended to be the paid step once billing is available.",
       },
       {
-        q: "What payment methods are supported?",
-        a: "Card payments are supported today. BlinkPay open banking is coming soon, pending approval — once live, you'll be able to pay directly from your business bank account with no card fees.",
+        q: "What payment methods will be supported?",
+        a: "Card payments are not available yet. BlinkPay open banking is planned — once live, you'll be able to pay directly from your business bank account with no card fees.",
       },
     ],
   },
@@ -126,7 +128,7 @@ export default function FAQPage() {
           Frequently asked questions
         </h1>
         <p style={{ fontSize: 15.5, color: C.grey, maxWidth: 520, margin: "0 auto", lineHeight: 1.6 }}>
-          Everything you need to know about how SteelSpec works, what it produces, and how billing works.
+          Everything you need to know about how SteelSpec works, what it produces, and how pricing is intended to work.
         </p>
       </section>
 
