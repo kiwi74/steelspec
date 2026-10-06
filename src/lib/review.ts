@@ -125,6 +125,11 @@ export interface ReviewDocument {
   identity: string[][];
   coverage: string[][];
   capture_runs: string[];
+  /** The analysis runs the RECORDED revision was built from, read off the persisted
+   *  snapshot — empty when nothing is recorded. A DIFFERENT identity from `capture_runs`,
+   *  which names what the CURRENT reconstruction read: after a lineage is selected the two
+   *  name different lineages, and the page shows each against its own band. (L33/L34) */
+  recorded_evidence_run_ids: string[];
   limitations: string[][];
   project_status: string | null;
   status_label: string | null;

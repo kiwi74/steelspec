@@ -335,7 +335,7 @@ export default function ProjectReview() {
           <h1 style={{ fontSize: 21, fontWeight: 700 }}>Review</h1>
           <Badge status={project.status} />
           {doc && doc.revision_recorded && (
-            <span style={{ fontSize: 11.5, color: C.grey, fontFamily: C.mono }}>revision {doc.revision}</span>
+            <span style={{ fontSize: 11.5, color: C.grey, fontFamily: C.mono }}>Recorded revision {doc.revision}</span>
           )}
         </div>
         <p style={{ fontSize: 13, color: C.grey, marginTop: 2 }}>
@@ -460,6 +460,25 @@ export default function ProjectReview() {
 
       {!loading && !refusal && doc?.revision_recorded && !doc.refusal_code && (!selectedDocumentId || selectedDocument) && (
         <>
+          {/* The RECORDED band and the CURRENT reconstruction are DIFFERENT things, and after a
+              lineage is selected they name different analysis runs — while both can report the
+              number 0, because a fresh reconstruction is always at its own revision 0. Neither
+              band is stated without the evidence it was built from, so a reader can tell which
+              lineage each describes. (L33/L34) */}
+          <div style={{ ...panel, marginBottom: 16 }}>
+            <div style={panelHead}><h3 style={{ fontSize: 14, fontWeight: 600 }}>Recorded review</h3></div>
+            <div style={{ padding: "16px 20px", fontSize: 12.5, color: C.ink2, lineHeight: 1.7 }}>
+              <div>Recorded revision <span style={{ fontFamily: C.mono }}>{doc.revision}</span></div>
+              <div style={{ color: C.grey }}>
+                Evidence: <span style={{ fontFamily: C.mono }}>{(doc.recorded_evidence_run_ids ?? []).join(", ") || "none recorded"}</span>
+              </div>
+              <div style={{ color: C.grey, marginTop: 6 }}>
+                This is the persisted review record. It is the evidence the recorded revision was
+                built from, which is not necessarily the evidence shown below.
+              </div>
+            </div>
+          </div>
+
           {outcome && (
             <div style={{ ...panel, marginBottom: 16, borderColor: outcome.failures.length > 0 ? C.border : C.rustBorder }}>
               <div style={panelHead}><h3 style={{ fontSize: 14, fontWeight: 600 }}>Recorded</h3></div>
@@ -501,6 +520,27 @@ export default function ProjectReview() {
               </div>
             </div>
           )}
+
+          {/* Everything below belongs to the CURRENT reconstruction, not to the recorded
+              revision above: a fresh reading of the selected document. The packages and tasks
+              are read from the reconstruction and are no part of the recorded record. */}
+          <div style={{ ...panel, marginBottom: 16 }}>
+            <div style={panelHead}><h3 style={{ fontSize: 14, fontWeight: 600 }}>Current reconstruction</h3></div>
+            <div style={{ padding: "16px 20px", fontSize: 12.5, color: C.ink2, lineHeight: 1.7 }}>
+              <div>
+                Evidence: <span style={{ fontFamily: C.mono }}>{(doc.capture_runs ?? []).join(", ") || "none"}</span>
+              </div>
+              {doc.identity.map((pair) => (
+                <div key={pair.join("|")} style={{ color: C.grey }}>
+                  {pair[0]}: <span style={{ fontFamily: C.mono }}>{pair[1]}</span>
+                </div>
+              ))}
+              <div style={{ color: C.grey, marginTop: 6 }}>
+                The connection packages and review tasks below are read from this reconstruction.
+                Nothing here is recorded engineering evidence.
+              </div>
+            </div>
+          </div>
 
           {doc.connections.map((connection) => (
             <ConnectionCard
