@@ -11,6 +11,8 @@
 // engineering answer, decides no status, and never re-derives a revision: it sends what
 // the review says and reports what the service answers, refusals included.
 
+import type { PageCaptures } from "./pageIdentity";
+
 const API_URL = import.meta.env.VITE_API_URL as string | undefined;
 
 /** What an `answer` payload must look like for a task. The service describes this per
@@ -119,6 +121,13 @@ export interface ReviewDocument {
    *  exists to fix. A revision of 0 with this false is "not opened", not "opened at 0". */
   revision_recorded: boolean;
   recorded_revisions: number[];
+  /** The recorded drawing identity of each page, when the service returns it.
+   *
+   *  Optional on purpose: the development contract is not yet a live guarantee. Its
+   *  absence means "the service did not supply page captures", which is NOT the same as
+   *  "every page's identity is blank" — a viewer must state the difference rather than
+   *  borrow another page's identity. The per-page rules live in `pageIdentity.ts`. */
+  page_captures?: PageCaptures | null;
   persisted_code: string;
   refusal_code: string;
   refusal_detail: string;

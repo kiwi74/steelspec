@@ -2,6 +2,10 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { X, ChevronLeft, ChevronRight, FileText } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import { theme as C } from "../lib/theme";
+import { useAuth } from "../lib/AuthContext";
+import { ReviewRefused, readReview, selectableDocuments } from "../lib/review";
+import { derivePageIdentity, resolvePageCaptureScope } from "../lib/pageIdentity";
+import type { PageCaptures } from "../lib/pageIdentity";
 
 interface DrawingPage {
   id: string;
@@ -26,7 +30,35 @@ interface ExtractedConnection {
   source_page: number | null;
 }
 
-export default function DrawingViewer({ projectId, onClose }: { projectId: string; onClose: () => void }) {
+/** Page captures kept together with the document scope they were read under. One object
+ *  means the viewer can never present captures from a different document or project as
+ *  the selected page's identity. */
+interface ScopedPageCaptures {
+  projectId: string;
+  documentId: string;
+  captures: PageCaptures | null;
+}
+
+export default function DrawingViewer({
+  projectId,
+  documentId,
+  onClose,
+}: {
+  projectId: string;
+  /** The document this viewer is showing, when the page that opened it knows one. It is
+   *  sent to the document-scoped review read so the page captures belong to the same
+   *  lineage. Optional because the Dashboard and project overview have no document scope;
+   *  with none, the viewer asks the service for the documents with readings and uses a
+   *  scope only when exactly one exists. More than one fails closed. */
+  documentId?: string | null;
+  onClose: () => void;
+}) {
+  const { session } = useAuth();
+  const token = session?.access_token ?? null;
+  // A blank prop is not a scope: `readReview` treats an empty id as unscoped, which would
+  // silently read across documents. Normalise here so the request cannot do that.
+  const requestedDocumentId =
+    typeof documentId === "string" && documentId.trim() ? documentId.trim() : null;
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [pages, setPages] = useState<DrawingPage[]>([]);
@@ -36,7 +68,10 @@ export default function DrawingViewer({ projectId, onClose }: { projectId: strin
   const [imageError, setImageError] = useState<string | null>(null);
   const [members, setMembers] = useState<ExtractedMember[]>([]);
   const [connections, setConnections] = useState<ExtractedConnection[]>([]);
-  const [drawingInfo, setDrawingInfo] = useState<{ file_name: string; drawing_number: string | null; drawing_title: string | null } | null>(null);
+  const [drawingInfo, setDrawingInfo] = useState<{ id: string; file_name: string } | null>(null);
+  const [pageCaptures, setPageCaptures] = useState<ScopedPageCaptures | null>(null);
+  const [identityLoading, setIdentityLoading] = useState(true);
+  const [identityError, setIdentityError] = useState<string | null>(null);
 
   // === Overlay behaviour ===
   //
@@ -85,7 +120,9 @@ export default function DrawingViewer({ projectId, onClose }: { projectId: strin
 
       const { data: drawing, error: dErr } = await supabase
         .from("drawings")
-        .select("id, file_name, drawing_number, drawing_title")
+        // No drawing-level identity is read here: it is page 1's metadata, and this viewer
+        // must not carry it over to another page. The page capture is the identity source.
+        .select("id, file_name")
         .eq("drawing_set_id", drawingSet.id)
         .order("uploaded_at", { ascending: true })
         .limit(1)
@@ -149,6 +186,76 @@ export default function DrawingViewer({ projectId, onClose }: { projectId: strin
     return () => { cancelled = true; };
   }, [projectId]);
 
+  // === Read the document's recorded page identities through the review service ===
+  //
+  // This is the existing authenticated review route, not a new database read. Page
+  // captures belong to ONE document, so the viewer resolves a document scope before it
+  // asks for identity: an explicit scope is used as given; otherwise the service's own
+  // list of documents with readings is consulted, and only a SINGLE result is a scope.
+  // Two or more is a choice this viewer must not make, and it fails closed rather than
+  // falling back to an unscoped identity. The field itself is optional in the development
+  // contract, so an absent response is handled as "not supplied", never as page 1.
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadPageCaptures() {
+      setPageCaptures(null);
+      setIdentityError(null);
+      setIdentityLoading(true);
+
+      if (!token) {
+        if (!cancelled) {
+          setIdentityError("Your session has expired. Sign in again to see the recorded page identity.");
+          setIdentityLoading(false);
+        }
+        return;
+      }
+
+      try {
+        let scope = requestedDocumentId;
+
+        if (!scope) {
+          const unscoped = await readReview(projectId, token);
+          if (cancelled) return;
+          const resolved = resolvePageCaptureScope(selectableDocuments(unscoped));
+          if (resolved.kind === "ambiguous") {
+            setIdentityError(
+              `This project has ${resolved.documentCount} source documents with readings. Page identity is shown only for one document at a time, and no document is chosen here.`,
+            );
+            return;
+          }
+          if (resolved.kind === "none") {
+            setIdentityError(
+              "No source document with recorded readings was returned, so this page's identity cannot be established.",
+            );
+            return;
+          }
+          scope = resolved.documentId;
+        }
+
+        const review = await readReview(projectId, token, scope);
+        if (cancelled) return;
+        setPageCaptures({
+          projectId,
+          documentId: scope,
+          captures: review.page_captures ?? null,
+        });
+      } catch (err) {
+        if (cancelled) return;
+        setIdentityError(
+          err instanceof ReviewRefused
+            ? err.message
+            : "The review service could not be reached, so the recorded page identity cannot be shown.",
+        );
+      } finally {
+        if (!cancelled) setIdentityLoading(false);
+      }
+    }
+
+    loadPageCaptures();
+    return () => { cancelled = true; };
+  }, [projectId, documentId, token]);
+
   // === Fetch a fresh signed URL whenever the current page changes ===
   const loadImage = useCallback(async (page: DrawingPage) => {
     setImageLoading(true);
@@ -175,6 +282,46 @@ export default function DrawingViewer({ projectId, onClose }: { projectId: strin
   const currentPage = pages[currentPageIdx];
   const pageMembers = members.filter((m) => m.source_page === currentPage?.page_number);
   const pageConnections = connections.filter((c) => c.source_page === currentPage?.page_number);
+
+  // A capture is usable only when its recorded project and document scope match this view.
+  // This keeps a previous document's (or project's) captures from being read as the
+  // selected page's identity while a new scoped read is in flight.
+  const currentCaptures =
+    pageCaptures &&
+    pageCaptures.projectId === projectId &&
+    (!requestedDocumentId || pageCaptures.documentId === requestedDocumentId)
+      ? pageCaptures
+      : null;
+  const identityBusy = identityLoading || (pageCaptures !== null && currentCaptures === null);
+  const expectedDocumentId = requestedDocumentId ?? currentCaptures?.documentId ?? null;
+
+  // Recomputed from the SELECTED page every render. There is no identity state to inherit,
+  // so moving from page 1 to page 37 cannot leave CL002 on screen while the new page loads.
+  // The expected drawing id is the drawing the page image belongs to; a capture for a
+  // different drawing is a lineage mismatch, not an identity to display.
+  const pageIdentity = derivePageIdentity(
+    currentCaptures?.captures ?? null,
+    currentPage?.page_number,
+    {
+      documentId: expectedDocumentId,
+      drawingId: drawingInfo?.id ?? null,
+    },
+  );
+  const identityHeading = identityBusy ? "Resolving page identity…" : pageIdentity.heading;
+  const identityDetail =
+    !identityBusy && !currentCaptures && identityError
+      ? identityError
+      : pageIdentity.identityDetail;
+
+  const identityTone =
+    pageIdentity.status === "recorded"
+      ? { fg: C.blue, bg: C.blueBg }
+      : pageIdentity.status === "blank" || pageIdentity.status === "missing_page"
+        ? { fg: C.grey, bg: C.borderLight }
+        : { fg: C.amber, bg: C.amberBg };
+  const parseTone = pageIdentity.parseFailed
+    ? { fg: C.red, bg: C.redBg }
+    : { fg: C.grey, bg: C.borderLight };
 
   // The review state exactly as the backend persisted it — never an inference.
   //
@@ -227,14 +374,34 @@ export default function DrawingViewer({ projectId, onClose }: { projectId: strin
           display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12,
           padding: "16px 20px", borderBottom: `1px solid ${C.border}`, background: C.card,
         }}>
-          <div className="ss-modal-heading">
+          <div className="ss-modal-heading" style={{ minWidth: 0 }}>
             <div style={{ fontSize: 11, color: C.rust, fontWeight: 600, letterSpacing: 1, textTransform: "uppercase" }}>
               Source Drawing
             </div>
-            <div style={{ fontSize: 15, fontWeight: 700, color: C.ink }}>
-              {drawingInfo?.drawing_number || drawingInfo?.file_name || "Drawing viewer"}
-              {drawingInfo?.drawing_title ? ` — ${drawingInfo.drawing_title}` : ""}
+            <div style={{ fontSize: 15, fontWeight: 700, color: C.ink, lineHeight: 1.35 }}>
+              {identityHeading}
             </div>
+            <div style={{ fontSize: 11.5, color: C.grey, marginTop: 2 }}>
+              {currentPage ? `Page ${currentPage.page_number} of ${pages.length}` : "No page selected"}
+              {drawingInfo?.file_name ? ` · ${drawingInfo.file_name}` : ""}
+            </div>
+            {!identityBusy && (
+              <>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 }}>
+                  <span style={{ fontSize: 10.5, fontWeight: 600, padding: "2px 8px", borderRadius: 20, color: identityTone.fg, background: identityTone.bg, whiteSpace: "nowrap" }}>
+                    {pageIdentity.identityLabel}
+                  </span>
+                  <span style={{ fontSize: 10.5, fontWeight: 600, padding: "2px 8px", borderRadius: 20, color: parseTone.fg, background: parseTone.bg, whiteSpace: "nowrap" }}>
+                    {pageIdentity.parseLabel}
+                  </span>
+                </div>
+                {identityDetail && (
+                  <div style={{ fontSize: 11.5, color: C.ink2, marginTop: 5, lineHeight: 1.5, maxWidth: 720 }}>
+                    {identityDetail}
+                  </div>
+                )}
+              </>
+            )}
           </div>
           <button onClick={onClose} aria-label="Close" className="ss-focus" style={{ background: "none", border: "none", cursor: "pointer", color: C.grey, padding: 6, flexShrink: 0 }}>
             <X size={20} />
