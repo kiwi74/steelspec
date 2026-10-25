@@ -5,6 +5,7 @@ import { theme as C } from "../../lib/theme";
 import type { Project } from "../../lib/projects";
 import { useAuth } from "../../lib/AuthContext";
 import ConnectionReviewSurface from "../../components/ConnectionReviewSurface";
+import ContinueExtractionCard from "../../components/ContinueExtractionCard";
 import {
   ReviewRefused,
   buildAnswer,
@@ -442,6 +443,20 @@ export default function ProjectReview() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* The extraction window is independent of a review decision: it is offered whenever
+          a document is selected, using the coverage the service's own review states. The
+          service chooses the next window; this card never computes one. It stays mounted
+          across the page's own refreshes so its one in-flight request cannot be duplicated. */}
+      {!refusal && doc && selectedDocumentId && (
+        <ContinueExtractionCard
+          projectId={project.id}
+          token={token}
+          documentId={selectedDocumentId}
+          coverage={doc.coverage}
+          onRefreshed={load}
+        />
       )}
 
       {/* A project with documents but none of them read is stated as that, not as an empty

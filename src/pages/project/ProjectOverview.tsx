@@ -4,6 +4,7 @@ import { FileSearch, ClipboardCheck } from "lucide-react";
 import { theme as C } from "../../lib/theme";
 import type { Project } from "../../lib/projects";
 import DrawingViewer from "../../components/DrawingViewer";
+import ContinueExtractionPanel from "../../components/ContinueExtractionPanel";
 import { Badge } from "../../components/ui";
 import { btnGhost, fmtDate, fmtTonnes, panel, panelHead } from "../../lib/ui";
 
@@ -95,6 +96,11 @@ export default function ProjectOverview() {
               </div>
             </div>
           </div>
+
+          {/* The next extraction window, when the service records one. The panel reads the
+              review the service already serves to resolve the document and its coverage; it
+              chooses no document and computes no page range. */}
+          <ContinueExtractionPanel projectId={project.id} />
         </div>
       </div>
 
